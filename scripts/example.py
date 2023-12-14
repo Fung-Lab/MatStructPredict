@@ -1,9 +1,9 @@
-from msp.dataset import download_dataset, load_dataset
+from msp.dataset import download_dataset, load_dataset, combine_dataset, update_dataset
 from msp.composition import sample_composition_random
 from msp.surrogate import Surrogate
 from msp.structure import Prediction
-from msp.structure.globalopt import BasinHopping
-from msp.validate import Validate
+from msp.structure.globalopt.basin_hopping import BasinHopping
+from msp.validate import read_dft_config, setup_DFT, Validate
 
 from matdeeplearn.common.ase_utils import MDLCalculator
 
@@ -16,19 +16,18 @@ my_dataset = download_dataset(repo="MP", save=True)
 
 #sample composition using a built in random sampler that checks for repeats in the dataset
 #returns a list of compositions, could be length 1 or many
-compositions = sample_composition_random(dataset=my_dataset, topk=5)
+compositions = sample_composition_random(dataset=my_dataset, n=5)
 compositions=["TiO2"]
 
+#Surrogate class that takes in calculator as an argument, but may have additional functions
+surrogate = Surrogate()
 #train the surrogate (optional)
-matdeeplearn.train(my_dataset)
+#matdeeplearn.train(my_dataset)
 surrogate.train(my_dataset)
 
 #get ase calculator (can be any valid ase calculator)
 calc_str = './configs/config_calculator.yml'
 calculator = MDLCalculator(config=calc_str)
-
-#Surrogate class that takes in calculator as an argument, but may have additional functions
-surrogate = Surrogate()
 
 
 basinhop = BasinHopping(calculator=MDLCalculator, hops=5, steps=100, optimizer="FIRE")
@@ -41,7 +40,8 @@ for i in range(0, len(compositions)):
     minima_list.append(putative_minima[0])
 
 #validate with DFT on-demand
-dft_config=read_dft_config()
+dft_path = 'path/to/dft_config'
+dft_config=read_dft_config(dft_config)
 method = setup_DFT(dft_config)
 validator = Validate(method=method, local=False)
 dft_results=[]
@@ -51,7 +51,7 @@ for i in range(0, len(minima_list)):
 my_dataset_updated = combine_dataset(my_dataset, dft_results)
 
 #update is a finetuning method, not from scratch
-matdeeplearn.update(my_dataset_updated)
+#matdeeplearn.update(my_dataset_updated)
 surrogate.update(my_dataset_updated)
 
-update_dataset(repo="MP", dft_results)
+update_dataset(repo="MP", dft_results=dft_results)
