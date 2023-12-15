@@ -1,9 +1,9 @@
-from msp.dataset import download_dataset, load_dataset, combine_dataset, update_dataset
-from msp.composition import sample_composition_random
-from msp.surrogate import Surrogate
-from msp.structure import Prediction
+from msp.dataset.dataset import download_dataset, load_dataset, combine_dataset, update_dataset
+from msp.composition.composition import sample_composition_random
+from msp.surrogate.surrogate import Surrogate
+from msp.structure.prediction import Prediction
 from msp.structure.globalopt.basin_hopping import BasinHopping
-from msp.validate import read_dft_config, setup_DFT, Validate
+from msp.validate.dft_validate import read_dft_config, setup_DFT, Validate
 
 from matdeeplearn.common.ase_utils import MDLCalculator
 
