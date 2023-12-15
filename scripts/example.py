@@ -5,7 +5,6 @@ from msp.structure.globalopt.basin_hopping import BasinHoppingASE, BasinHopping
 from msp.utils.objectives import UpperConfidenceBound
 from msp.validate import read_dft_config, setup_DFT, Validate
 
-from matdeeplearn.common.ase_utils import MDLCalculator
 
 #download dataset from Materials Project
 #return dataset class or dict
@@ -25,7 +24,7 @@ for i in range(0, max_iterations):
     
     
     #Initialize a forcefield class, reading in from config (we use MDL_FF but it can be a force field from another library)
-    config = 'path/to/forcefield_config.yml'
+    config = 'config.yml'
     forcefield = MDL_FF(config=config)
     #train the forcefield (optional)
     forcefield.train(my_dataset)
@@ -68,3 +67,5 @@ for i in range(0, max_iterations):
     
     #update the dataset as well
     update_dataset(repo="MP", data=dft_results)
+
+print("Job done")
