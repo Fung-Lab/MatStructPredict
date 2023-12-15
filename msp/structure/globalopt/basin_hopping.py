@@ -3,7 +3,7 @@ from ase.optimize import FIRE
 from time import time
 import numpy as np
 
-class BasinHopping(Optimizer):
+class BasinHoppingASE(Optimizer):
 
     def __init__(self, calculator, hops=5, steps=100, optimizer="FIRE", **kwargs):
         """
@@ -18,7 +18,7 @@ class BasinHopping(Optimizer):
         super().__init__("BasinHopping", hops=hops, steps=steps, optimizer=optimizer, **kwargs)
         self.calculator = calculator
 
-    def optimize(self, composition, cell, topk=1):
+    def predict(self, composition, topk=1):
         """
         Optimizes the composition using the basin hopping optimizer
 
@@ -28,6 +28,7 @@ class BasinHopping(Optimizer):
         Returns:
             list: A list of ase.Atoms objects representing the predicted minima
         """
+        cell = [5, 5, 5, 90, 90, 90]
         atoms = self.atom_from_str(composition, cell)
         atoms.set_calculator(self.calculator)
 
@@ -53,3 +54,14 @@ class BasinHopping(Optimizer):
 
         return min_atoms
         
+        
+class BasinHopping(Optimizer):
+    def __init__(self, calculator, hops=5, steps=100, optimizer="FIRE", **kwargs):
+        """
+        Initialize
+        """
+        pass
+    
+    def predict(self, composition, topk=1):
+        min_atoms=[[]]
+        return min_atoms

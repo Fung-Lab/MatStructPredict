@@ -1,5 +1,5 @@
 
-class Surrogate:
+class ForceField():
 
     def __init__(self):
         """

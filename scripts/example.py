@@ -13,13 +13,13 @@ my_dataset = download_dataset(repo="MP", save=True)
 #or load dataset from disk:
 my_dataset = load_dataset(path ="path/to/dataset")
 
-
+max_iterations=10
 #active learning loop
 for i in range(0, max_iterations):
     #sample composition using a built in random sampler that checks for repeats in the dataset
     #returns a list of compositions, could be length 1 or many
     #compositions are a dictionary of {element:amount}
-    compositions = sample_composition_random(dataset=my_dataset, n=5)
+    #compositions = sample_composition_random(dataset=my_dataset, n=5)
     #or manually specify the list of dict:
     compositions=[{'Ti':2, 'O':1}, {'Al':2, 'O':3}]
     
@@ -50,7 +50,7 @@ for i in range(0, max_iterations):
     
     #validate with DFT on-demand on the putative minima
     dft_path = 'path/to/dft_config.yml'
-    dft_config=read_dft_config(dft_config)
+    dft_config=read_dft_config(dft_path)
     method = setup_DFT(dft_config)
     validator = Validate(method=method, local=False)
     dft_results=[]
@@ -67,4 +67,4 @@ for i in range(0, max_iterations):
     
     
     #update the dataset as well
-    update_dataset(repo="MP", data=dft_results)  
+    update_dataset(repo="MP", data=dft_results)

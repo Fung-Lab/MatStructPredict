@@ -37,7 +37,7 @@ def combine_dataset(dataset, dft_results):
     """
     pass
 
-def update_dataset(repo, dft_results):
+def update_dataset(repo, data):
     """
     Update dataset with DFT results
 
