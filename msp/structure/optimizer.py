@@ -44,7 +44,7 @@ class Optimizer:
                     elements.append(current_element)
                     current_element = ''
                 current_count += char
-
+            
         if current_count != '':
             counts.append(int(current_count))
 
