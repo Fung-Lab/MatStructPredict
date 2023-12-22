@@ -15,15 +15,20 @@ def sample_composition_random(dataset, n=5, max_elements=5, max_atoms=10):
         compositions (list): list of compositions
     """
     compositions = []
+    composition_strings = []
     for i in range(n):
         while True:
-            composition = ''
-            random_symbols = np.random.choice(chemical_symbols, size=np.random.randint(1, max_elements + 1), replace=False)
+            composition_string = ''
+            composition_dict = {}
+            random_symbols = np.random.choice(chemical_symbols[1:100], size=np.random.randint(1, max_elements + 1), replace=False)
             random_symbols = np.sort(random_symbols)
             for sym in random_symbols:
-                composition += sym + str(np.random.randint(1, max_atoms + 1)) + ' '
-            composition = composition[:-1]
-            if composition not in compositions and composition not in dataset:
-                compositions.append(composition)
+                count = np.random.randint(1, max_atoms + 1)
+                composition_string += sym + str(count) + ' '
+                composition_dict[sym] = count
+            composition_string = composition_string[:-1]
+            if composition_string not in composition_strings and composition_string not in dataset:
+                composition_strings.append(composition_string)
+                compositions.append(composition_dict)
                 break
     return compositions

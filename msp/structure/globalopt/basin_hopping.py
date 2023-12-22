@@ -5,7 +5,7 @@ import numpy as np
 
 class BasinHoppingASE(Optimizer):
 
-    def __init__(self, calculator, hops=5, steps=100, optimizer="FIRE", **kwargs):
+    def __init__(self, calculator, hops=5, steps=100, optimizer="FIRE", dr=.5, **kwargs):
         """
         Initialize the basin hopping optimizer.
 
@@ -15,10 +15,13 @@ class BasinHoppingASE(Optimizer):
             steps (int, optional): Number of steps per basin hop. Defaults to 100.
             optimizer (str, optional): Optimizer to use for each step. Defaults to "FIRE".
         """
-        super().__init__("BasinHopping", hops=hops, steps=steps, optimizer=optimizer, **kwargs)
+        super().__init__("BasinHopping", hops=hops, steps=steps, optimizer=optimizer, dr=dr, **kwargs)
         self.calculator = calculator
+        self.hops = hops
+        self.steps = steps
+        self.dr = dr
 
-    def predict(self, composition, topk=1):
+    def predict(self, composition, cell=[5, 5, 5, 90, 90, 90], topk=1):
         """
         Optimizes the composition using the basin hopping optimizer
 
@@ -28,8 +31,7 @@ class BasinHoppingASE(Optimizer):
         Returns:
             list: A list of ase.Atoms objects representing the predicted minima
         """
-        cell = [5, 5, 5, 90, 90, 90]
-        atoms = self.atom_from_str(composition, cell)
+        atoms = self.atom_from_dict(composition, cell)
         atoms.set_calculator(self.calculator)
 
         min_atoms = atoms.copy()
@@ -39,13 +41,16 @@ class BasinHoppingASE(Optimizer):
 
         for i in range(self.hops):
             oldEnergy = curr_atoms.get_potential_energy()
-            optimizer = FIRE(curr_atoms)
+            optimizer = FIRE(curr_atoms, logfile=None)
             start_time = time()
             optimizer.run(fmax=0.001, steps=self.steps)
             end_time = time()
             num_steps = optimizer.get_number_of_steps()
             time_per_step = (end_time - start_time) / num_steps if num_steps != 0 else 0
             optimizedEnergy = curr_atoms.get_potential_energy()
+            print('HOP', i, 'took', end_time - start_time, 'seconds')
+            print('HOP', i, 'old energy', oldEnergy)
+            print('HOP', i, 'optimized energy', optimizedEnergy)
             if optimizedEnergy < min_energy:
                 min_atoms = curr_atoms.copy()
                 min_energy = optimizedEnergy
