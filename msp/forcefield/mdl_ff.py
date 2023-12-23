@@ -40,7 +40,7 @@ class MDL_FF(ForceField):
     
         
                     
-    def train(self, dataset):
+    def train(self, dataset, model_path='best_checkpoint.pt'):
         """
         Train the force field model on the dataset.
         """
@@ -60,9 +60,9 @@ class MDL_FF(ForceField):
         self.model = self.trainer.model
         self.trainer.train()
         state = {"state_dict": self.model.state_dict()}
-        torch.save(state, 'model/best_checkpoint.pt')
+        torch.save(state, model_path)
 
-    def update(self, dataset):
+    def update(self, dataset, model_path='best_checkpoint.pt'):
         """
         Update the force field model on the dataset.
         """
@@ -72,20 +72,26 @@ class MDL_FF(ForceField):
         self.model = self.trainer.model
         self.trainer.train()
         state = {"state_dict": self.model.state_dict()}
-        torch.save(state, 'model/best_checkpoint.pt')
+        torch.save(state, model_path)
     
     def process_data(self, dataset):
         """
         Process data for the force field model.
         """
+        #add tqdm
         new_data_list = [Data() for _ in range(len(dataset))]
         for i, struc in enumerate(dataset):
             data = new_data_list[i]
             data.n_atoms = len(struc['atomic_numbers'])
             data.pos = torch.tensor(struc['positions'])
+            #check cell dimensions
             data.cell = torch.tensor([struc['cell']])
+            #structure id optional or null
             data.structure_id = [struc['structure_id']]
             data.z = torch.tensor(struc['atomic_numbers'])
+            data.forces = torch.tensor(struc['forces'])
+            data.stress = torch.tensor(struc['stress'])
+            #optional
             data.u = torch.tensor(np.zeros((3))[np.newaxis, ...]).float()
             if 'y' not in struc:
                 if 'relaxed_energy' in struc:
@@ -98,7 +104,8 @@ class MDL_FF(ForceField):
                 data.y = np.array([struc['y']])
             data.y = torch.tensor(data.y).float()
             if data.y.dim() == 1:
-                data.y = data.y.unsqueeze(0) 
+                data.y = data.y.unsqueeze(0)
+ 
         dataset = {"full": new_data_list}
         return dataset
 

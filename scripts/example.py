@@ -13,17 +13,18 @@ import numpy as np
 #return dataset class or dict
 my_dataset = download_dataset(repo="MP", save=True)
 #or load dataset from disk:
-my_dataset = load_dataset(path ="path/to/dataset")
-my_dataset = json.load(open("data/data_graph_scalar.json", "r"))
-
+#my_dataset = load_dataset(path ="path/to/dataset")
+my_dataset = json.load(open("/global/cfs/projectdirs/m3641/Shared/Materials_datasets/MP_data_forces/raw/data_subset_msp.json", "r"))
+print(my_dataset[0])
 max_iterations=10
 
 #Initialize a forcefield class, reading in from config (we use MDL_FF but it can be a force field from another library)
-train_config = 'scripts/mdl_config.yml'
-calculator_config = 'config_calculator.yml'
+train_config = 'mdl_config.yml'
+calculator_config = 'mdl_calculator_config.yml'
 forcefield = MDL_FF(train_config, my_dataset)
 #train the forcefield (optional)
-forcefield.train(my_dataset)
+
+#forcefield.train(my_dataset)
 #active learning loop
 for i in range(0, max_iterations):
     #sample composition using a built in random sampler that checks for repeats in the dataset
