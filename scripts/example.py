@@ -20,7 +20,7 @@ max_iterations=10
 
 #Initialize a forcefield class, reading in from config (we use MDL_FF but it can be a force field from another library)
 train_config = 'scripts/mdl_config.yml'
-calculator_config = 'scripts/config_calculator.yml'
+calculator_config = 'scripts/mdl_config.yml'
 forcefield = MDL_FF(train_config, my_dataset, True)
 #train the forcefield (optional)
 forcefield.train(my_dataset, .9, .05, .05, True)
