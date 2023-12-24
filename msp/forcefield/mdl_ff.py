@@ -16,7 +16,7 @@ from matdeeplearn.common.data import dataset_split
 
 class MDL_FF(ForceField):
 
-    def __init__(self, train_config, dataset):
+    def __init__(self, train_config, dataset, forces=False):
         """
         Initialize the surrogate model.
         """
@@ -25,56 +25,51 @@ class MDL_FF(ForceField):
                 self.train_config = yaml.safe_load(yaml_file)     
         #to be added
         self.dataset = {}
-        dataset = self.process_data(dataset)
+        dataset = self.process_data(dataset, forces)
         dataset = dataset['full']
-        train_ratio = self.train_config["dataset"]["train_ratio"]
-        val_ratio = self.train_config["dataset"]["val_ratio"]
-        test_ratio = self.train_config["dataset"]["test_ratio"]
-        self.dataset["train"], self.dataset["val"], self.dataset["test"] = dataset_split(
-                    dataset,
-                    train_ratio,
-                    val_ratio,
-                    test_ratio,
-                )
+        self.dataset["train"] = dataset
         self.trainer = self.from_config_train(self.train_config, self.dataset)
     
         
                     
-    def train(self, dataset):
+    def train(self, dataset, train_ratio, val_ratio, test_ratio, forces=False, max_epochs=None, lr=None, batch_size=None):
         """
         Train the force field model on the dataset.
         """
-        dataset = self.process_data(dataset)
+        dataset = self.process_data(dataset, forces)
         dataset = dataset['full']
-        train_ratio = self.train_config["dataset"]["train_ratio"]
-        val_ratio = self.train_config["dataset"]["val_ratio"]
-        test_ratio = self.train_config["dataset"]["test_ratio"]
         self.dataset["train"], self.dataset["val"], self.dataset["test"] = dataset_split(
                     dataset,
                     train_ratio,
                     val_ratio,
                     test_ratio,
                 )
-        self.update_trainer(self.train_config, self.dataset)
+        self.update_trainer(self.dataset, max_epochs, lr, batch_size)
         #initialize new model
         self.model = self.trainer.model
         self.trainer.train()
         state = {"state_dict": self.model.state_dict()}
         torch.save(state, 'model/best_checkpoint.pt')
 
-    def update(self, dataset):
+    def update(self, dataset, train_ratio, val_ratio, test_ratio, forces=False, max_epochs=None, lr=None, batch_size=None):
         """
         Update the force field model on the dataset.
         """
-        dataset = self.process_data(dataset)
-        self.dataset['train'] = dataset['full']
-        self.update_trainer(self.train_config, self.dataset)
+        dataset = self.process_data(dataset, forces)
+        dataset = dataset['full']
+        self.dataset["train"], self.dataset["val"], self.dataset["test"] = dataset_split(
+                    dataset,
+                    train_ratio,
+                    val_ratio,
+                    test_ratio,
+                )
+        self.update_trainer(self.dataset, max_epochs, lr, batch_size)
         self.model = self.trainer.model
         self.trainer.train()
         state = {"state_dict": self.model.state_dict()}
         torch.save(state, 'model/best_checkpoint.pt')
     
-    def process_data(self, dataset):
+    def process_data(self, dataset, forces):
         """
         Process data for the force field model.
         """
@@ -98,7 +93,11 @@ class MDL_FF(ForceField):
                 data.y = np.array([struc['y']])
             data.y = torch.tensor(data.y).float()
             if data.y.dim() == 1:
-                data.y = data.y.unsqueeze(0) 
+                data.y = data.y.unsqueeze(0)
+            if forces:
+                data.forces = torch.tensor(struc['forces'])
+                if 'stress' in struc:
+                    data.stress = torch.tensor(struc['stress'])
         dataset = {"full": new_data_list}
         return dataset
 
@@ -192,7 +191,7 @@ class MDL_FF(ForceField):
             use_amp=config["task"].get("use_amp", False),
         )
     
-    def update_trainer(self, config, dataset):
+    def update_trainer(self, dataset, max_epochs=None, lr=None, batch_size=None):
         """Class method used to initialize PropertyTrainer from a config object
         config has the following sections:
             trainer
@@ -203,7 +202,7 @@ class MDL_FF(ForceField):
             dataset
         """
 
-        if config["task"]["parallel"] == True:
+        if self.train_config["task"]["parallel"] == True:
             local_world_size = os.environ.get("LOCAL_WORLD_SIZE", None)
             local_world_size = int(local_world_size)
             dist.init_process_group(
@@ -215,16 +214,22 @@ class MDL_FF(ForceField):
             local_world_size = 1
         self.trainer.epoch = 0
         self.trainer.best_metric = 1e10
-        self.trainer.optimizer = BaseTrainer._load_optimizer(config["optim"], self.trainer.model, local_world_size)
-        self.trainer.train_sampler = BaseTrainer._load_sampler(config["optim"], self.dataset, local_world_size, rank)
+        if lr is not None:
+            self.train_config["optim"]["lr"] = lr
+        if batch_size is not None:
+            self.train_config["optim"]["batch_size"] = batch_size
+        if max_epochs is not None:
+            self.trainer.max_epochs = max_epochs
+        self.trainer.optimizer = BaseTrainer._load_optimizer(self.train_config["optim"], self.trainer.model, local_world_size)
+        self.trainer.train_sampler = BaseTrainer._load_sampler(self.train_config["optim"], self.dataset, local_world_size, rank)
         self.trainer.data_loader = BaseTrainer._load_dataloader(
-            config["optim"],
-            config["dataset"],
+            self.train_config["optim"],
+            self.train_config["dataset"],
             dataset,
             self.trainer.train_sampler,
-            config["task"]["run_mode"],
+            self.train_config["task"]["run_mode"],
         )
-        self.trainer.scheduler = BaseTrainer._load_scheduler(config["optim"]["scheduler"], self.trainer.optimizer)
-        self.trainer.loss = BaseTrainer._load_loss(config["optim"]["loss"])
+        self.trainer.scheduler = BaseTrainer._load_scheduler(self.train_config["optim"]["scheduler"], self.trainer.optimizer)
+        self.trainer.loss = BaseTrainer._load_loss(self.train_config["optim"]["loss"])
         
     
