@@ -1,5 +1,5 @@
 from msp.dataset import download_dataset, load_dataset, combine_dataset, update_dataset
-from msp.composition import sample_composition_random
+from msp.composition import generate_random_compositions, sample_random_composition
 from msp.forcefield import MDL_FF
 from msp.structure.globalopt.basin_hopping import BasinHoppingASE, BasinHopping
 from msp.utils.objectives import UpperConfidenceBound
@@ -23,13 +23,13 @@ train_config = 'scripts/mdl_config.yml'
 calculator_config = 'scripts/mdl_config.yml'
 forcefield = MDL_FF(train_config, my_dataset, True)
 #train the forcefield (optional)
-forcefield.train(my_dataset, .9, .05, .05, True)
+forcefield.train(my_dataset, .9, .05, .05, True, max_epochs=1)
 #active learning loop
 for i in range(0, max_iterations):
     #sample composition using a built in random sampler that checks for repeats in the dataset
     #returns a list of compositions, could be length 1 or many
     #compositions are a dictionary of {element:amount}
-    compositions = sample_composition_random(dataset=my_dataset, n=1)
+    compositions = sample_random_composition(dataset=my_dataset, n=5)
     #or manually specify the list of dict:
     #compositions=[{'Ti':2, 'O':1}, {'Al':2, 'O':3}]
     

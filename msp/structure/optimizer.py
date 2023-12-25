@@ -22,20 +22,17 @@ class Optimizer(ABC):
         """
         pass
 
-    def atom_from_dict(self, composition, cell):
+    def atom_from_comp(self, composition, cell):
         """
-        Creates an ASE atoms object from a composition string
+        Creates an ASE atoms object from a composition list
         
         Args:
-            composition (dict): A dictionary representing a chemical composition
+            composition (list): A list representing the atomic numbers
         
         Returns:
             ase.Atoms: An ASE atoms object representing the composition
         """
-        elements = []
-        for el in composition:
-            elements.extend([atomic_numbers[el]] * composition[el])
-        atoms = Atoms(elements, cell=cell, pbc=(True, True, True))
+        atoms = Atoms(composition, cell=cell, pbc=(True, True, True))
         scaled_positions = np.random.uniform(0., 1., (len(atoms), 3))
         atoms.set_scaled_positions(scaled_positions)
         return atoms

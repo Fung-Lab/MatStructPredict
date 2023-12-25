@@ -31,7 +31,7 @@ class BasinHoppingASE(Optimizer):
         Returns:
             list: A list of ase.Atoms objects representing the predicted minima
         """
-        atoms = self.atom_from_dict(composition, cell)
+        atoms = self.atom_from_comp(composition, cell)
         atoms.set_calculator(self.calculator)
 
         min_atoms = atoms.copy()

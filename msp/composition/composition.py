@@ -1,7 +1,8 @@
 from ase.data import chemical_symbols
 import numpy as np
+import random
 
-def sample_composition_random(dataset, n=5, max_elements=5, max_atoms=10):
+def generate_random_compositions(dataset, n=5, max_elements=5, max_atoms=10):
     """
     Generate n unique compositions that do not appear in dataset randomly
 
@@ -15,20 +16,27 @@ def sample_composition_random(dataset, n=5, max_elements=5, max_atoms=10):
         compositions (list): list of compositions
     """
     compositions = []
-    composition_strings = []
+    dataset_comps = []
+    for data in dataset:
+        data['atomic_numbers'].sort()
+        dataset_comps.append(data['atomic_numbers'])
     for i in range(n):
         while True:
-            composition_string = ''
-            composition_dict = {}
-            random_symbols = np.random.choice(chemical_symbols[1:100], size=np.random.randint(1, max_elements + 1), replace=False)
-            random_symbols = np.sort(random_symbols)
-            for sym in random_symbols:
-                count = np.random.randint(1, max_atoms + 1)
-                composition_string += sym + str(count) + ' '
-                composition_dict[sym] = count
-            composition_string = composition_string[:-1]
-            if composition_string not in composition_strings and composition_string not in dataset:
-                composition_strings.append(composition_string)
-                compositions.append(composition_dict)
+            comp = []
+            num_atoms = np.random.randint(1, max_elements + 1)
+            random_atoms = np.random.randint(1, 101, size=num_atoms)
+            random_atoms = np.sort(random_atoms)
+            for atom in random_atoms:
+                comp.extend([atom] * np.random.randint(1, max_atoms))
+            if comp not in dataset_comps:
+                compositions.append(comp)
                 break
     return compositions
+
+def sample_random_composition(dataset, n=5):
+    dataset_comps = []
+    for data in dataset:
+        data['atomic_numbers'].sort()
+        dataset_comps.append(data['atomic_numbers'])
+    return [dataset_comps[i] for i in random.sample(range(len(dataset_comps)), n)]
+

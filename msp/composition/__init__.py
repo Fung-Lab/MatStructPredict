@@ -1,3 +1,3 @@
-__all__ = ["sample_composition_random"]
+__all__ = ["generate_random_compositions", "sample_random_composition"]
 
-from .composition import sample_composition_random
+from .composition import generate_random_compositions, sample_random_composition
