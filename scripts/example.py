@@ -20,7 +20,6 @@ max_iterations=10
 
 #Initialize a forcefield class, reading in from config (we use MDL_FF but it can be a force field from another library)
 train_config = 'scripts/mdl_config.yml'
-calculator_config = 'scripts/mdl_config.yml'
 forcefield = MDL_FF(train_config, my_dataset, True)
 #train the forcefield (optional)
 forcefield.train(my_dataset, .9, .05, .05, True, max_epochs=1)
@@ -36,7 +35,7 @@ for i in range(0, max_iterations):
     
     
     #forcefield itself is not an ase calculator, but can be used to return the MDLCalculator class
-    forcefield_calc = forcefield.create_ase_calc(calculator_config)
+    forcefield_calc = forcefield.create_ase_calc()
     #initialize the predictor class, this is the BasinHopping version which uses an ASE calculator, but we can have another version for batched search
     predictor = BasinHoppingASE(forcefield_calc, hops=1, steps=100, optimizer="FIRE", dr=0.5)
     #alternatively if we dont use ASE, we can optimize in batch, and optimize over multiple objectives as well

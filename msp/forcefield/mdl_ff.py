@@ -110,11 +110,11 @@ class MDL_FF(ForceField):
         #output is a dict
         return output
         
-    def create_ase_calc(self, calculator_config=None):
+    def create_ase_calc(self):
         """
         Returns ase calculator
         """
-        calculator = MDLCalculator(config=calculator_config)        
+        calculator = MDLCalculator(config=self.train_config)        
         return calculator
     
     def from_config_train(self, config, dataset):
