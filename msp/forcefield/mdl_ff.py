@@ -2,10 +2,12 @@ from msp.forcefield.base import ForceField
 
 import torch
 from torch_geometric.data import Data
+from torch_geometric.loader import DataLoader
 import numpy as np
 import yaml
 import os
 from torch import distributed as dist
+from ase import Atoms
 from matdeeplearn.common.registry import registry
 from matdeeplearn.common.ase_utils import MDLCalculator
 from matdeeplearn.preprocessor.processor import process_data
@@ -106,7 +108,7 @@ class MDL_FF(ForceField):
         """
         Calls model directly
         """
-        output = self.model(data)
+        output = self.model(data)['output']
         #output is a dict
         return output
         
@@ -116,6 +118,74 @@ class MDL_FF(ForceField):
         """
         calculator = MDLCalculator(config=self.train_config)        
         return calculator
+
+    def optimize(self, atoms, steps, log_per, learning_rate, num_structures=-1, batch_size=4, device='cpu'):
+        data_list = self.atoms_to_data(atoms)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        orig = self.model.gradient
+        self.model.gradient = False
+        model = self.model
+        # Created a data list
+        loader = DataLoader(data_list, batch_size=batch_size)
+        loader_iter = iter(loader)
+        res_atoms = []
+        res_energy = []
+        for i in range(len(loader_iter)):
+            batch = next(loader_iter).to(device)
+            pos, cell = batch.pos, batch.cell
+            
+            opt = torch.optim.LBFGS([pos, cell], lr=learning_rate)
+
+            pos.requires_grad_(True)
+            cell.requires_grad_(True)
+
+            def closure(step, temp):
+                opt.zero_grad()
+                energies = model(batch.to(device))['output']
+                total_energy = energies.sum()
+                total_energy.backward(retain_graph=True)
+                if log_per > 0 and step[0] % log_per == 0:
+                    print("{0:4d}   {1: 3.6f}".format(step[0], total_energy.item()))
+                step[0] += 1
+                batch.pos, batch.cell = pos, cell
+                temp[0] = energies
+                return total_energy
+            temp = [0]
+            step = [0]
+            for _ in range(steps):
+                opt.step(lambda: closure(step, temp))
+            res_atoms.extend(self.data_to_atoms(batch))
+            res_energy.extend(temp[0].cpu().detach().numpy())
+        self.model.gradient = orig
+        return res_atoms, res_energy
+    
+    def atoms_to_data(self, atoms):
+        n_structures = len(atoms)
+        data_list = [Data() for _ in range(n_structures)]
+
+        for i, s in enumerate(atoms):
+            data = atoms[i]
+
+            pos = torch.tensor(data.get_positions(), dtype=torch.float)
+            cell = torch.tensor([data.cell[:]], dtype=torch.float)
+            atomic_numbers = torch.LongTensor(data.numbers)
+            structure_id = 0
+                    
+            data_list[i].n_atoms = len(atomic_numbers)
+            data_list[i].pos = pos
+            data_list[i].cell = cell   
+            data_list[i].structure_id = [structure_id]  
+            data_list[i].z = atomic_numbers
+            data_list[i].u = torch.Tensor(np.zeros((3))[np.newaxis, ...])
+        return data_list
+
+    def data_to_atoms(self, batch):
+        res = []
+        curr = 0
+        for i in range(len(batch.n_atoms)):
+            res.append(Atoms(batch.z[curr:curr+batch.n_atoms[i]].cpu().numpy(), cell=batch.cell[i].cpu().detach().numpy(), pbc=(True, True, True), positions=batch.pos[curr:curr+batch.n_atoms[i]].cpu().detach().numpy()))
+            curr += batch.n_atoms[i]
+        return res
     
     def from_config_train(self, config, dataset):
         """Class method used to initialize PropertyTrainer from a config object
@@ -139,7 +209,6 @@ class MDL_FF(ForceField):
         else:
             rank = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             local_world_size = 1
-
         model = BaseTrainer._load_model(config["model"], config["dataset"]["preprocess_params"], self.dataset, local_world_size, rank)
         optimizer = BaseTrainer._load_optimizer(config["optim"], model, local_world_size)
         sampler = BaseTrainer._load_sampler(config["optim"], self.dataset, local_world_size, rank)
