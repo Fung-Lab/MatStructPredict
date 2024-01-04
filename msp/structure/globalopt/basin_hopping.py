@@ -2,6 +2,7 @@ from msp.structure.optimizer import Optimizer
 from ase.optimize import FIRE
 from time import time
 import numpy as np
+from copy import deepcopy
 
 class BasinHoppingASE(Optimizer):
 
@@ -15,7 +16,7 @@ class BasinHoppingASE(Optimizer):
             steps (int, optional): Number of steps per basin hop. Defaults to 100.
             optimizer (str, optional): Optimizer to use for each step. Defaults to "FIRE".
         """
-        super().__init__("BasinHopping", hops=hops, steps=steps, optimizer=optimizer, dr=dr, **kwargs)
+        super().__init__("BasinHoppingASE", hops=hops, steps=steps, optimizer=optimizer, dr=dr, **kwargs)
         self.calculator = calculator
         self.hops = hops
         self.steps = steps
@@ -31,7 +32,7 @@ class BasinHoppingASE(Optimizer):
         Returns:
             list: A list of ase.Atoms objects representing the predicted minima
         """
-        atoms = self.atom_from_dict(composition, cell)
+        atoms = self.atom_from_comp(composition, cell)
         atoms.set_calculator(self.calculator)
 
         min_atoms = atoms.copy()
@@ -61,12 +62,35 @@ class BasinHoppingASE(Optimizer):
         
         
 class BasinHopping(Optimizer):
-    def __init__(self, calculator, hops=5, steps=100, optimizer="FIRE", **kwargs):
+    def __init__(self, forcefield, hops=5, steps=100, optimizer="FIRE", dr=.5, **kwargs):
         """
         Initialize
         """
-        pass
+        super().__init__("BasinHopping", hops=hops, steps=steps, optimizer=optimizer, dr=dr, **kwargs)
+        self.forcefield = forcefield
+        self.hops = hops
+        self.steps = steps
+        self.dr = dr
     
-    def predict(self, composition, topk=1):
-        min_atoms=[[]]
+    def predict(self, compositions, cell=[5, 5, 5, 90, 90, 90], topk=1, batch_size=4, log_per=50, lr=.05):
+        atoms = []
+        for comp in compositions:
+            atoms.append(self.atom_from_comp(comp, cell))
+        min_atoms = deepcopy(atoms)
+        oldEnergy = [1e10] * len(min_atoms)
+        for i in range(self.hops):
+            print("Hop", i)
+            newAtoms, newEnergy = self.forcefield.optimize(atoms, self.steps, log_per, lr, batch_size=batch_size)
+            for j in range(len(newAtoms)):
+                if newEnergy[j] < oldEnergy[j]:
+                    print('Atom changed: index ', j)
+                    print(min_atoms[j])
+                    print(oldEnergy[j])
+                    print(newAtoms[j])
+                    print(newEnergy[j])
+                    oldEnergy[j] = newEnergy[j]
+                    min_atoms[j] = newAtoms[j].copy()
+                atoms[j].set_positions(atoms[j].get_positions() + np.random.uniform(-1., 1., (len(atoms[j]), 3)) * self.dr)
+
         return min_atoms
+

@@ -23,7 +23,7 @@ def load_dataset(path):
         dataset (dict): dictionary of dataset
     """
     pass
-
+     
 def combine_dataset(dataset, dft_results):
     """
     Combine dataset with DFT results
@@ -35,7 +35,7 @@ def combine_dataset(dataset, dft_results):
     Returns:
         dataset (dict): dictionary of dataset
     """
-    pass
+    return dataset
 
 def update_dataset(repo, data):
     """
