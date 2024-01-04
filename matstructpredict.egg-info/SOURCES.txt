@@ -17,5 +17,9 @@ msp/runner/__init__.py
 msp/structure/__init__.py
 msp/structure/base.py
 msp/structure/optimizer.py
+msp/structure/prediction.py
+msp/utils/__init__.py
+msp/utils/objectives/__init__.py
+msp/utils/objectives/objectives.py
 msp/validate/__init__.py
 msp/validate/dft_validate.py
