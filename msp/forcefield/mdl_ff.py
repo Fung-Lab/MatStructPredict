@@ -31,6 +31,7 @@ class MDL_FF(ForceField):
         dataset = dataset['full']
         self.dataset["train"] = dataset
         self.trainer = self.from_config_train(self.train_config, self.dataset)
+        self.model = self.trainer.model
     
         
                     
@@ -51,7 +52,7 @@ class MDL_FF(ForceField):
         self.model = self.trainer.model
         self.trainer.train()
         state = {"state_dict": self.model.state_dict()}
-        torch.save(state, 'model/best_checkpoint.pt')
+        torch.save(state, self.train_config['task']['checkpoint_path'])
 
     def update(self, dataset, train_ratio, val_ratio, test_ratio, forces=False, max_epochs=None, lr=None, batch_size=None):
         """
@@ -69,7 +70,7 @@ class MDL_FF(ForceField):
         self.model = self.trainer.model
         self.trainer.train()
         state = {"state_dict": self.model.state_dict()}
-        torch.save(state, 'model/best_checkpoint.pt')
+        torch.save(state, self.train_config['task']['checkpoint_path'])
     
     def process_data(self, dataset, forces):
         """
