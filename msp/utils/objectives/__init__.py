@@ -1,3 +1,3 @@
-__all__ = ["UpperConfidenceBound"]
+__all__ = ["UpperConfidenceBound", "Energy", "Uncertainty"]
 
-from .objectives import UpperConfidenceBound
+from .objectives import UpperConfidenceBound, Energy, Uncertainty

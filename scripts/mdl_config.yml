@@ -28,8 +28,8 @@ task:
 model:
   name: torchmd_etEarly
   # model attributes
-  hidden_channels: 64
-  num_layers: 4
+  hidden_channels: 128
+  num_layers: 8
   num_rbf: 50
   activation: "silu"
   attn_activation: "silu"
@@ -47,11 +47,12 @@ model:
   otf_node_attr: True
   # compute gradients w.r.t to positions and cell, requires otf_edge_attr=True      
   gradient: True
+  model_ensemble: 1
 
 optim:
   max_epochs: 5
   max_checkpoint_epochs: 0
-  lr: 0.0005
+  lr: 0.00005
   # Either custom or from torch.nn.functional library. If from torch, loss_type is TorchLossWrapper
   loss:
     loss_type: ForceStressLoss
@@ -128,6 +129,6 @@ dataset:
   # Where the dataset is loaded; either "cpu" or "cuda"
   dataset_device: cpu
   # Ratios for train/val/test split out of a total of less than 1 (0.8 corresponds to 80% of the data)
-  train_ratio: 0.9
+  train_ratio: 0.009
   val_ratio: 0.1
   test_ratio: 0.0

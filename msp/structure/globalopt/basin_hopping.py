@@ -72,7 +72,7 @@ class BasinHopping(Optimizer):
         self.steps = steps
         self.dr = dr
     
-    def predict(self, compositions, cell=[5, 5, 5, 90, 90, 90], topk=1, batch_size=4, log_per=50, lr=.05):
+    def predict(self, compositions, objective_func, cell=[5, 5, 5, 90, 90, 90], topk=1, batch_size=4, log_per=50, lr=.05):
         atoms = []
         for comp in compositions:
             atoms.append(self.atom_from_comp(comp, cell))
@@ -80,7 +80,7 @@ class BasinHopping(Optimizer):
         oldEnergy = [1e10] * len(min_atoms)
         for i in range(self.hops):
             print("Hop", i)
-            newAtoms, newEnergy = self.forcefield.optimize(atoms, self.steps, log_per, lr, batch_size=batch_size)
+            newAtoms, newEnergy = self.forcefield.optimize(atoms, self.steps, objective_func, log_per, lr, batch_size=batch_size)
             for j in range(len(newAtoms)):
                 if newEnergy[j] < oldEnergy[j]:
                     print('Atom changed: index ', j)
