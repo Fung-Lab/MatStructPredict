@@ -43,7 +43,7 @@ for i in range(0, max_iterations):
     #we do this by first initializing our objective function, which is similar to the loss function class in matdeeplearn
     objective_func = UpperConfidenceBound(c=0.1)
     #predictor = BasinHopping(forcefield, hops=5, steps=100, optimizer="Adam", batch_size=100, objective_func=objective_func)
-    minima_list = predictor.predict(compositions, perturbPos=True, perturbCell=True, perturbAtomicNum=True)
+    minima_list = predictor.predict(compositions, perturbPos=True, perturbCell=True, perturbAtomicNum=True, addAtom=True, removeAtom=True)
     
     #predict structure returns a list of minima, could be 1 or many
     # minima_list=[]
