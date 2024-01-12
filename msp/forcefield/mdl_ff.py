@@ -35,7 +35,7 @@ class MDL_FF(ForceField):
     
         
                     
-    def train(self, dataset, train_ratio, val_ratio, test_ratio, forces=False, max_epochs=None, lr=None, batch_size=None):
+    def train(self, dataset, train_ratio, val_ratio, test_ratio, forces=False, max_epochs=None, lr=None, batch_size=None, model_path='best_checkpoint.pt'):
         """
         Train the force field model on the dataset.
         """
@@ -52,9 +52,11 @@ class MDL_FF(ForceField):
         self.model = self.trainer.model
         self.trainer.train()
         state = {"state_dict": self.model.state_dict()}
-        torch.save(state, self.train_config['task']['checkpoint_path'])
+        torch.save(state, model_path)
 
-    def update(self, dataset, train_ratio, val_ratio, test_ratio, forces=False, max_epochs=None, lr=None, batch_size=None):
+    
+
+    def update(self, dataset, train_ratio, val_ratio, test_ratio, forces=False, max_epochs=None, lr=None, batch_size=None, model_path='best_checkpoint.pt'):
         """
         Update the force field model on the dataset.
         """
@@ -70,20 +72,26 @@ class MDL_FF(ForceField):
         self.model = self.trainer.model
         self.trainer.train()
         state = {"state_dict": self.model.state_dict()}
-        torch.save(state, self.train_config['task']['checkpoint_path'])
+        torch.save(state, model_path)
     
     def process_data(self, dataset, forces):
         """
         Process data for the force field model.
         """
+        #add tqdm
         new_data_list = [Data() for _ in range(len(dataset))]
         for i, struc in enumerate(dataset):
             data = new_data_list[i]
             data.n_atoms = len(struc['atomic_numbers'])
             data.pos = torch.tensor(struc['positions'])
+            #check cell dimensions
             data.cell = torch.tensor([struc['cell']])
+            #structure id optional or null
             data.structure_id = [struc['structure_id']]
             data.z = torch.tensor(struc['atomic_numbers'])
+            data.forces = torch.tensor(struc['forces'])
+            data.stress = torch.tensor(struc['stress'])
+            #optional
             data.u = torch.tensor(np.zeros((3))[np.newaxis, ...]).float()
             if 'y' not in struc:
                 if 'relaxed_energy' in struc:
@@ -100,7 +108,7 @@ class MDL_FF(ForceField):
             if forces:
                 data.forces = torch.tensor(struc['forces'])
                 if 'stress' in struc:
-                    data.stress = torch.tensor(struc['stress'])
+                    data.stress = torch.tensor(struc['stress']) 
         dataset = {"full": new_data_list}
         return dataset
 

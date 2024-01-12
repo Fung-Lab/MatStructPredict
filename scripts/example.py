@@ -13,10 +13,10 @@ import numpy as np
 #return dataset class or dict
 my_dataset = download_dataset(repo="MP", save=True)
 #or load dataset from disk:
-my_dataset = load_dataset(path ="path/to/dataset")
+#my_dataset = load_dataset(path ="path/to/dataset")
 my_dataset = json.load(open("data/data_subset_msp.json", "r"))
-
-max_iterations=2
+print(my_dataset[0])
+max_iterations=10
 
 #Initialize a forcefield class, reading in from config (we use MDL_FF but it can be a force field from another library)
 train_config = 'scripts/mdl_config.yml'
@@ -44,7 +44,9 @@ for i in range(0, max_iterations):
     objective_func = UpperConfidenceBound(c=0.1)
     #predictor = BasinHopping(forcefield, hops=5, steps=100, optimizer="Adam", batch_size=100, objective_func=objective_func)
     minima_list = predictor.predict(compositions, perturbPos=True, perturbCell=True, perturbAtomicNum=True, addAtom=True, removeAtom=True)
+
     
+    # ---Optimizing structures one at a time--- 
     #predict structure returns a list of minima, could be 1 or many
     # minima_list=[]
     # for j in range(0, len(compositions)):
