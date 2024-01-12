@@ -47,7 +47,7 @@ class MDL_FF(ForceField):
                     val_ratio,
                     test_ratio,
                 )
-        self.update_trainer(self.dataset, max_epochs, lr, batch_size)
+        self.trainer = self.from_config_train(self.train_config, self.dataset, max_epochs, lr, batch_size)
         #initialize new model
         self.model = self.trainer.model
         self.trainer.train()
@@ -148,23 +148,21 @@ class MDL_FF(ForceField):
             pos.requires_grad_(True)
             cell.requires_grad_(True)
 
-            def closure(step, temp):
+            def closure(step):
                 opt.zero_grad()
-                energies = model(batch.to(device))['output']
+                energies = model(batch)['output']
                 total_energy = energies.sum()
                 total_energy.backward(retain_graph=True)
                 if log_per > 0 and step[0] % log_per == 0:
                     print("{0:4d}   {1: 3.6f}".format(step[0], total_energy.item()))
                 step[0] += 1
                 batch.pos, batch.cell = pos, cell
-                temp[0] = energies
                 return total_energy
-            temp = [0]
             step = [0]
             for _ in range(steps):
-                opt.step(lambda: closure(step, temp))
+                opt.step(lambda: closure(step))
             res_atoms.extend(self.data_to_atoms(batch))
-            res_energy.extend(temp[0].cpu().detach().numpy())
+            res_energy.extend(model(batch)['output'].cpu().detach().numpy())
         self.model.gradient = orig
         return res_atoms, res_energy
     
@@ -196,7 +194,7 @@ class MDL_FF(ForceField):
             curr += batch.n_atoms[i]
         return res
     
-    def from_config_train(self, config, dataset):
+    def from_config_train(self, config, dataset, max_epochs=None, lr=None, batch_size=None):
         """Class method used to initialize PropertyTrainer from a config object
         config has the following sections:
             trainer
@@ -218,6 +216,10 @@ class MDL_FF(ForceField):
         else:
             rank = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             local_world_size = 1
+        if lr is not None:
+            self.train_config["optim"]["lr"] = lr
+        if batch_size is not None:
+            self.train_config["optim"]["batch_size"] = batch_size
         model = BaseTrainer._load_model(config["model"], config["dataset"]["preprocess_params"], self.dataset, local_world_size, rank)
         optimizer = BaseTrainer._load_optimizer(config["optim"], model, local_world_size)
         sampler = BaseTrainer._load_sampler(config["optim"], self.dataset, local_world_size, rank)
@@ -230,7 +232,7 @@ class MDL_FF(ForceField):
         )
         scheduler = BaseTrainer._load_scheduler(config["optim"]["scheduler"], optimizer)
         loss = BaseTrainer._load_loss(config["optim"]["loss"])
-        max_epochs = config["optim"]["max_epochs"]
+        max_epochs = config["optim"]["max_epochs"] if max_epochs is None else max_epochs
         clip_grad_norm = config["optim"].get("clip_grad_norm", None)
         verbosity = config["optim"].get("verbosity", None)
         batch_tqdm = config["optim"].get("batch_tqdm", False)
