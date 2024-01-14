@@ -23,6 +23,13 @@ class BasinHoppingBase(Optimizer):
         self.hops = hops
         self.dr = dr
         self.max_atom_num = max_atom_num
+        self.perturbs = []
+        self.perturbs.append(self.perturbPos)
+        self.perturbs.append(self.perturbCell)
+        self.perturbs.append(self.perturbAtomicNum)
+        self.perturbs.append(self.addAtom)
+        self.perturbs.append(self.removeAtom)
+        self.perturbs.append(self.swapAtom)
     
     def perturbPos(self, atoms, **kwargs):
         disp = np.random.uniform(-1., 1., (len(atoms), 3)) * self.dr
@@ -50,6 +57,12 @@ class BasinHoppingBase(Optimizer):
     def removeAtom(self, atoms, **kwargs):
         atoms.pop(np.random.randint(len(atoms)))
 
+    def swapAtom(self, atoms, **kwargs):
+        nums = atoms.get_atomic_numbers()
+        rand_ind = np.random.randint(len(atoms), size=2)
+        nums[rand_ind[0]], nums[rand_ind[1]] = nums[rand_ind[1]], nums[rand_ind[0]]
+        atoms.set_atomic_numbers(nums)
+
 
         
         
@@ -71,7 +84,7 @@ class BasinHoppingASE(BasinHoppingBase):
         super().__init__("BasinHoppingASE", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, **kwargs)
         self.calculator = calculator
 
-    def predict(self, composition, cell=np.array([[5, 0, 0], [0, 5, 0], [0, 0, 5]]), topk=1, perturbPos=True, perturbCell=False, perturbAtomicNum=False, addAtom=False, removeAtom=False, max_atom_num=101, num_atoms_perturb=1):
+    def predict(self, composition, cell=np.array([[5, 0, 0], [0, 5, 0], [0, 0, 5]]), topk=1, max_atom_num=101, num_atoms_perturb=1):
         """
         Optimizes the composition using the basin hopping optimizer
 
@@ -89,18 +102,6 @@ class BasinHoppingASE(BasinHoppingBase):
         curr_atoms.set_calculator(self.calculator)
         min_energy = curr_atoms.get_potential_energy()
 
-        perturbs = []
-        if perturbPos:
-            pertubs.append(self.perturbPos)
-        if perturbCell:
-            pertubs.append(self.perturbCell)
-        if perturbAtomicNum:
-            pertubs.append(self.perturbAtomicNum)
-        if addAtom:
-            perturbs.append(self.addAtom)
-        if removeAtom:
-            perturbs.append(self.removeAtom)
-
         for i in range(self.hops):
             oldEnergy = curr_atoms.get_potential_energy()
             optimizer = FIRE(curr_atoms, logfile=None)
@@ -116,8 +117,7 @@ class BasinHoppingASE(BasinHoppingBase):
             if optimizedEnergy < min_energy:
                 min_atoms = curr_atoms.copy()
                 min_energy = optimizedEnergy
-            for perturb in perturbs:
-                perturb(curr_atoms, num_atoms_perturb=num_atoms_perturb)
+            self.perturbs[np.random.randint(len(self.perturbs))](curr_atoms, num_atoms_perturb=num_atoms_perturb)
 
         return min_atoms
         
@@ -130,44 +130,27 @@ class BasinHopping(BasinHoppingBase):
         super().__init__("BasinHopping", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, **kwargs)
         self.forcefield = forcefield
     
-    def predict(self, compositions, cell=[5, 5, 5, 90, 90, 90], topk=1, batch_size=4, log_per=50, lr=.05,  perturbPos=True, perturbCell=False, perturbAtomicNum=False, addAtom=False, removeAtom=False, num_atoms_perturb=1):
-
-        perturbs = []
-        if perturbPos:
-            perturbs.append(self.perturbPos)
-        if perturbCell:
-            perturbs.append(self.perturbCell)
-        if perturbAtomicNum:
-            perturbs.append(self.perturbAtomicNum)
-        if addAtom:
-            perturbs.append(self.addAtom)
-        if removeAtom:
-            perturbs.append(self.removeAtom)
-
+    def predict(self, compositions, cell=[5, 5, 5, 90, 90, 90], topk=1, batch_size=4, log_per=50, lr=.05, num_atoms_perturb=1):
         atoms = []
         for comp in compositions:
             atoms.append(self.atom_from_comp(comp, cell))
         min_atoms = deepcopy(atoms)
-        oldEnergy = [1e10] * len(min_atoms)
+        min_energy = [1e10] * len(min_atoms)
         for i in range(self.hops):
             print("Hop", i)
             newAtoms, newEnergy = self.forcefield.optimize(atoms, self.steps, log_per, lr, batch_size=batch_size)
             for j in range(len(newAtoms)):
-                if newEnergy[j] < oldEnergy[j]:
+                if newEnergy[j] < min_energy[j]:
                     print('Atom changed: index ', j)
                     print(min_atoms[j])
-                    print(oldEnergy[j])
+                    print(min_energy[j])
                     print(newAtoms[j])
                     print(newEnergy[j])
-                    oldEnergy[j] = newEnergy[j]
+                    min_energy[j] = newEnergy[j]
                     min_atoms[j] = newAtoms[j].copy()
-                atoms = deepcopy(min_atoms)
-                for perturb in perturbs:
-                    print(atoms[j])
-                    print(atoms[j].get_positions())
-                    perturb(atoms[j], num_atoms_perturb=num_atoms_perturb)
-                    print(atoms[j])
-                    print(atoms[j].get_positions())
+            atoms = deepcopy(min_atoms)
+            for j in range(len(atoms)):
+                self.perturbs[np.random.randint(len(self.perturbs))](atoms[j], num_atoms_perturb=num_atoms_perturb)
 
         return min_atoms
 
