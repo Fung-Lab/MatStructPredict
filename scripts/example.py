@@ -22,7 +22,7 @@ max_iterations=2
 train_config = 'scripts/mdl_config.yml'
 forcefield = MDL_FF(train_config, my_dataset, True)
 #train the forcefield (optional)
-forcefield.train(my_dataset, .9, .05, .05, True, max_epochs=1)
+forcefield.update(my_dataset, .2, .05, .05, True, max_epochs=6)
 #active learning loop
 for i in range(0, max_iterations):
     #sample composition using a built in random sampler that checks for repeats in the dataset
@@ -35,21 +35,21 @@ for i in range(0, max_iterations):
     
     
     #forcefield itself is not an ase calculator, but can be used to return the MDLCalculator class
-    #forcefield_calc = forcefield.create_ase_calc()
+    forcefield_calc = forcefield.create_ase_calc()
     #initialize the predictor class, this is the BasinHopping version which uses an ASE calculator, but we can have another version for batched search
-    #predictor = BasinHoppingASE(forcefield_calc, hops=1, steps=100, optimizer="FIRE", dr=0.5)
-    predictor = BasinHopping(forcefield, hops=5, steps=25, dr=.5)
+    predictor = BasinHoppingASE(forcefield_calc, hops=5, steps=100, optimizer="FIRE", dr=0.5)
+    #predictor = BasinHopping(forcefield, hops=5, steps=25, dr=.5)
     #alternatively if we dont use ASE, we can optimize in batch, and optimize over multiple objectives as well
     #we do this by first initializing our objective function, which is similar to the loss function class in matdeeplearn
     objective_func = UpperConfidenceBound(c=0.1)
     #predictor = BasinHopping(forcefield, hops=5, steps=100, optimizer="Adam", batch_size=100, objective_func=objective_func)
-    minima_list = predictor.predict(compositions)
+    #minima_list = predictor.predict(compositions)
     
     #predict structure returns a list of minima, could be 1 or many
-    # minima_list=[]
-    # for j in range(0, len(compositions)):
-    #     putative_minima = predictor.predict(compositions[j], topk=1)
-    #     minima_list.append(putative_minima[0])
+    minima_list=[]
+    for j in range(0, len(compositions)):
+        putative_minima = predictor.predict(compositions[j], topk=1)
+        minima_list.append(putative_minima[0])
     
     
     #validate with DFT on-demand on the putative minima

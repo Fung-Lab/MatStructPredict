@@ -6,6 +6,7 @@ from torch_geometric.loader import DataLoader
 import numpy as np
 import yaml
 import os
+import copy
 from torch import distributed as dist
 from ase import Atoms
 from matdeeplearn.common.registry import registry
@@ -29,7 +30,12 @@ class MDL_FF(ForceField):
         self.dataset = {}
         dataset = self.process_data(dataset, forces)
         dataset = dataset['full']
-        self.dataset["train"] = dataset
+        self.dataset["train"], self.dataset["val"], self.dataset["test"] = dataset_split(
+                    dataset,
+                    self.train_config['dataset']['train_ratio'],
+                    self.train_config['dataset']['val_ratio'],
+                    self.train_config['dataset']['test_ratio'],
+                )
         self.trainer = self.from_config_train(self.train_config, self.dataset)
         self.model = self.trainer.model
     
@@ -53,6 +59,7 @@ class MDL_FF(ForceField):
         self.trainer.train()
         state = {"state_dict": self.model.state_dict()}
         torch.save(state, model_path)
+        self.train_config['task']['checkpoint_path'] = model_path
 
     
 
@@ -70,6 +77,7 @@ class MDL_FF(ForceField):
                 )
         self.update_trainer(self.dataset, max_epochs, lr, batch_size)
         self.model = self.trainer.model
+        print("Model's state_dict:")
         self.trainer.train()
         state = {"state_dict": self.model.state_dict()}
         torch.save(state, model_path)
@@ -248,8 +256,8 @@ class MDL_FF(ForceField):
 
         if local_world_size > 1:
             dist.barrier()
-            
-        return PropertyTrainer(
+
+        trainer = PropertyTrainer(
             model=model,
             dataset=dataset,
             optimizer=optimizer,
@@ -270,6 +278,15 @@ class MDL_FF(ForceField):
             checkpoint_path=checkpoint_path,
             use_amp=config["task"].get("use_amp", False),
         )
+        
+        use_checkpoint = config["task"].get("continue_job", False)
+        if use_checkpoint:
+            print("Attempting to load checkpoint...")
+            trainer.load_checkpoint(config["task"].get("load_training_state", True))
+            print("loaded from", checkpoint_path)
+            print("Recent checkpoint loaded successfully.")
+
+        return trainer
     
     def update_trainer(self, dataset, max_epochs=None, lr=None, batch_size=None):
         """Class method used to initialize PropertyTrainer from a config object
