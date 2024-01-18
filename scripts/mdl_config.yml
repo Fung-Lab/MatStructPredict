@@ -1,11 +1,11 @@
-trainer: matdeeplearn.trainers.PropertyTrainer
+trainer: property
 
 task:
   run_mode: train
   identifier: my_train_job
   parallel: False
   # If seed is not set, then it will be random every time
-  seed: 201
+  seed: 200
   # Defaults to run directory if not specified
   save_dir: mdl_training/
   # continue from a previous job
@@ -47,11 +47,12 @@ model:
   otf_node_attr: True
   # compute gradients w.r.t to positions and cell, requires otf_edge_attr=True      
   gradient: True
+  model_ensemble: 1
 
 optim:
   max_epochs: 5
   max_checkpoint_epochs: 0
-  lr: 0.0005
+  lr: 0.00005
   # Either custom or from torch.nn.functional library. If from torch, loss_type is TorchLossWrapper
   loss:
     loss_type: ForceStressLoss
@@ -76,7 +77,7 @@ dataset:
   processed: False
   # Path to data files - this can either be in the form of a string denoting a single path or a dictionary of {train: train_path, val: val_path, test: test_path, predict: predict_path}
   #src: data/data_subset_msp.json
-  src: /global/cfs/projectdirs/m3641/Shared/Materials_datasets/MP_data_forces/raw/data_full_msp.json
+  src: /global/cfs/projectdirs/m3641/Shared/Materials_datasets/MP_data_forces/raw/data_subset_mdl_test.json
   # Path to target file within data_path - this can either be in the form of a string denoting a single path or a dictionary of {train: train_path, val: val_path, test: test_path} or left blank when the dataset is a single json file
   # Example: target_path: "data/raw_graph_scalar/targets.csv"
   target_path: 
@@ -92,7 +93,7 @@ dataset:
         # For example, an index: 0 (default) will use the first entry in the target vector 
         # if all values are to be predicted simultaneously, then specify index: -1
         index: -1
-      otf_transform: True # Optional parameter, default is True
+      otf: True # Optional parameter, default is True
   # Format of data files (limit to those supported by ASE: https://wiki.fysik.dtu.dk/ase/ase/io/io.html)
   data_format: json
   # specify if additional attributes to be loaded into the dataset from the .json file; e.g. additional_attributes: [forces, stress]
@@ -123,7 +124,8 @@ dataset:
     # whether or not to add self-loops
     self_loop: True
     # Method of obtaining atom dictionary: available: (onehot)
-    node_representation: onehot    
+    node_representation: onehot  
+    all_neighbors: True  
   # Number of workers for dataloader, see https://pytorch.org/docs/stable/data.html
   num_workers: 0
   # Where the dataset is loaded; either "cpu" or "cuda"

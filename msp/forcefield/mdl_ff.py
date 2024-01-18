@@ -57,9 +57,9 @@ class MDL_FF(ForceField):
         #initialize new model
         self.model = self.trainer.model
         self.trainer.train()
-        state = {"state_dict": self.model.state_dict()}
+        state = {"state_dict": self.model[0].state_dict()}
         torch.save(state, model_path)
-        self.train_config['task']['checkpoint_path'] = model_path
+        #self.train_config['task']['checkpoint_path'] = model_path
 
     
 
@@ -76,10 +76,11 @@ class MDL_FF(ForceField):
                     test_ratio,
                 )
         self.update_trainer(self.dataset, max_epochs, lr, batch_size)
+        print(self.trainer.validate())
         self.model = self.trainer.model
-        print("Model's state_dict:")
         self.trainer.train()
-        state = {"state_dict": self.model.state_dict()}
+        print(self.trainer.validate())
+        state = {"state_dict": self.model[0].state_dict()}
         torch.save(state, model_path)
     
     def process_data(self, dataset, forces):
@@ -93,10 +94,13 @@ class MDL_FF(ForceField):
             data.n_atoms = len(struc['atomic_numbers'])
             data.pos = torch.tensor(struc['positions'])
             #check cell dimensions
-            data.cell = torch.tensor([struc['cell']])
+            #data.cell = torch.tensor([struc['cell']])
+            data.cell = torch.tensor(np.array(struc['cell']), dtype=torch.float).view(1, 3, 3)
+            if (np.array(data.cell) == np.array([[0.0, 0.0, 0.0],[0.0, 0.0, 0.0],[0.0, 0.0, 0.0]])).all():
+                data.cell = torch.zeros((3,3)).unsqueeze(0)
             #structure id optional or null
             data.structure_id = [struc['structure_id']]
-            data.z = torch.tensor(struc['atomic_numbers'])
+            data.z = torch.LongTensor(struc['atomic_numbers'])
             data.forces = torch.tensor(struc['forces'])
             data.stress = torch.tensor(struc['stress'])
             #optional
@@ -237,6 +241,7 @@ class MDL_FF(ForceField):
             self.dataset,
             sampler,
             config["task"]["run_mode"],
+            config["model"],
         )
         scheduler = BaseTrainer._load_scheduler(config["optim"]["scheduler"], optimizer)
         loss = BaseTrainer._load_loss(config["optim"]["loss"])
@@ -278,7 +283,6 @@ class MDL_FF(ForceField):
             checkpoint_path=checkpoint_path,
             use_amp=config["task"].get("use_amp", False),
         )
-        
         use_checkpoint = config["task"].get("continue_job", False)
         if use_checkpoint:
             print("Attempting to load checkpoint...")
@@ -310,7 +314,7 @@ class MDL_FF(ForceField):
             rank = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             local_world_size = 1
         self.trainer.epoch = 0
-        self.trainer.best_metric = 1e10
+        #self.trainer.best_metric = 1e10
         if lr is not None:
             self.train_config["optim"]["lr"] = lr
         if batch_size is not None:
@@ -325,6 +329,7 @@ class MDL_FF(ForceField):
             dataset,
             self.trainer.train_sampler,
             self.train_config["task"]["run_mode"],
+            self.train_config["model"],
         )
         self.trainer.scheduler = BaseTrainer._load_scheduler(self.train_config["optim"]["scheduler"], self.trainer.optimizer)
         self.trainer.loss = BaseTrainer._load_loss(self.train_config["optim"]["loss"])
