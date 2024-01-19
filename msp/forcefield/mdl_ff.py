@@ -125,12 +125,19 @@ class MDL_FF(ForceField):
         return dataset
 
 
-    def forward(self, data):
+    def _forward(self, batch_data):
         """
         Calls model directly
-        """
-        output = self.model(data)['output']
-        #output is a dict
+        """    
+        out_list = []
+        for i in range(len(self.trainer.model)):
+            out_list.append(self.trainer.model[i](batch_data))
+                        
+        out_stack = torch.stack([o["output"] for o in out_list])
+        output = {}
+        output["potential_energy"] = torch.mean(out_stack, dim=0)          
+        output["potential_energy_uncertainty"] = torch.std(out_stack, dim=0)          
+        #output is a dict        
         return output
         
     def create_ase_calc(self):
@@ -140,12 +147,11 @@ class MDL_FF(ForceField):
         calculator = MDLCalculator(config=self.train_config)        
         return calculator
 
-    def optimize(self, atoms, steps, log_per, learning_rate, num_structures=-1, batch_size=4, device='cpu'):
+    def optimize(self, atoms, steps, objective_func, log_per, learning_rate, num_structures=-1, batch_size=4, device='cpu'):
         data_list = self.atoms_to_data(atoms)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        orig = self.model.gradient
-        self.model.gradient = False
-        model = self.model
+        for i in range(len(self.trainer.model)):
+            self.trainer.model[i].gradient = False
         # Created a data list
         loader = DataLoader(data_list, batch_size=batch_size)
         loader_iter = iter(loader)
@@ -160,22 +166,27 @@ class MDL_FF(ForceField):
             pos.requires_grad_(True)
             cell.requires_grad_(True)
 
-            def closure(step):
+            def closure(step, temp):
                 opt.zero_grad()
-                energies = model(batch)['output']
-                total_energy = energies.sum()
-                total_energy.backward(retain_graph=True)
+                output = self._forward(batch.to(device))
+                loss = objective_func(output)
+                loss.mean().backward(retain_graph=True)
                 if log_per > 0 and step[0] % log_per == 0:
-                    print("{0:4d}   {1: 3.6f}".format(step[0], total_energy.item()))
+                    print("{0:4d}   {1: 3.6f}".format(step[0], loss.mean().item()))
                 step[0] += 1
                 batch.pos, batch.cell = pos, cell
-                return total_energy
+                temp[0] = loss
+                return loss.mean()
+
+            temp = [0]
             step = [0]
             for _ in range(steps):
-                opt.step(lambda: closure(step))
+                opt.step(lambda: closure(step, temp))
             res_atoms.extend(self.data_to_atoms(batch))
-            res_energy.extend(model(batch)['output'].cpu().detach().numpy())
-        self.model.gradient = orig
+            res_energy.extend(temp[0].cpu().detach().numpy())
+
+        for i in range(len(self.model)):
+            self.model[i].gradient = True
         return res_atoms, res_energy
     
     def atoms_to_data(self, atoms):
