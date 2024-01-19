@@ -7,6 +7,7 @@ import numpy as np
 import yaml
 import os
 import copy
+import gc
 from torch import distributed as dist
 from ase import Atoms
 from matdeeplearn.common.registry import registry
@@ -19,7 +20,7 @@ from matdeeplearn.common.data import dataset_split
 
 class MDL_FF(ForceField):
 
-    def __init__(self, train_config, dataset, forces=False):
+    def __init__(self, train_config, dataset):
         """
         Initialize the surrogate model.
         """
@@ -28,7 +29,7 @@ class MDL_FF(ForceField):
                 self.train_config = yaml.safe_load(yaml_file)     
         #to be added
         self.dataset = {}
-        dataset = self.process_data(dataset, forces)
+        dataset = self.process_data(dataset)
         dataset = dataset['full']
         self.dataset["train"], self.dataset["val"], self.dataset["test"] = dataset_split(
                     dataset,
@@ -37,15 +38,15 @@ class MDL_FF(ForceField):
                     self.train_config['dataset']['test_ratio'],
                 )
         self.trainer = self.from_config_train(self.train_config, self.dataset)
-        self.model = self.trainer.model
+        #self.model = self.trainer.model
     
         
                     
-    def train(self, dataset, train_ratio, val_ratio, test_ratio, forces=False, max_epochs=None, lr=None, batch_size=None, model_path='best_checkpoint.pt'):
+    def train(self, dataset, train_ratio, val_ratio, test_ratio, max_epochs=None, lr=None, batch_size=None, save_path='saved_model'):
         """
         Train the force field model on the dataset.
         """
-        dataset = self.process_data(dataset, forces)
+        dataset = self.process_data(dataset)
         dataset = dataset['full']
         self.dataset["train"], self.dataset["val"], self.dataset["test"] = dataset_split(
                     dataset,
@@ -54,20 +55,29 @@ class MDL_FF(ForceField):
                     test_ratio,
                 )
         self.trainer = self.from_config_train(self.train_config, self.dataset, max_epochs, lr, batch_size)
-        #initialize new model
-        self.model = self.trainer.model
         self.trainer.train()
-        state = {"state_dict": self.model[0].state_dict()}
-        torch.save(state, model_path)
-        #self.train_config['task']['checkpoint_path'] = model_path
-
+        
+        #state = {"state_dict": self.model.state_dict()}
+        os.makedirs(save_path, exist_ok=True)
+        for i in range(len(self.trainer.model)):
+            sub_path = os.path.join(save_path, f"checkpoint_{i}",)        
+            os.makedirs(sub_path, exist_ok=True)        
+            if str(self.trainer.rank) not in ("cpu", "cuda"):
+                state = {"state_dict": self.trainer.model[i].module.state_dict()}         
+            else:   
+                state = {"state_dict": self.trainer.model[i].state_dict()}         
+            model_path = os.path.join(sub_path, "best_checkpoint.pt")  
+            torch.save(state, model_path)
+        
+        gc.collect()
+        torch.cuda.empty_cache()
     
 
-    def update(self, dataset, train_ratio, val_ratio, test_ratio, forces=False, max_epochs=None, lr=None, batch_size=None, model_path='best_checkpoint.pt'):
+    def update(self, dataset, train_ratio, val_ratio, test_ratio, max_epochs=None, lr=None, batch_size=None, save_path='saved_model'):
         """
         Update the force field model on the dataset.
         """
-        dataset = self.process_data(dataset, forces)
+        dataset = self.process_data(dataset)
         dataset = dataset['full']
         self.dataset["train"], self.dataset["val"], self.dataset["test"] = dataset_split(
                     dataset,
@@ -76,14 +86,25 @@ class MDL_FF(ForceField):
                     test_ratio,
                 )
         self.update_trainer(self.dataset, max_epochs, lr, batch_size)
-        print(self.trainer.validate())
-        self.model = self.trainer.model
+        #self.model = self.trainer.model
         self.trainer.train()
-        print(self.trainer.validate())
-        state = {"state_dict": self.model[0].state_dict()}
-        torch.save(state, model_path)
-    
-    def process_data(self, dataset, forces):
+
+  
+        os.makedirs(save_path, exist_ok=True)
+        for i in range(len(self.trainer.model)):
+            sub_path = os.path.join(save_path, f"checkpoint_{i}",)        
+            os.makedirs(sub_path, exist_ok=True)        
+            if str(self.trainer.rank) not in ("cpu", "cuda"):
+                state = {"state_dict": self.trainer.model[i].module.state_dict()}         
+            else:   
+                state = {"state_dict": self.trainer.model[i].state_dict()}         
+            model_path = os.path.join(sub_path, "best_checkpoint.pt")  
+            torch.save(state, model_path)
+            
+        gc.collect()
+        torch.cuda.empty_cache()
+            
+    def process_data(self, dataset):
         """
         Process data for the force field model.
         """
@@ -99,28 +120,23 @@ class MDL_FF(ForceField):
             if (np.array(data.cell) == np.array([[0.0, 0.0, 0.0],[0.0, 0.0, 0.0],[0.0, 0.0, 0.0]])).all():
                 data.cell = torch.zeros((3,3)).unsqueeze(0)
             #structure id optional or null
+            if 'structure_id' in struc:
+                data.structure_id = [struc['structure_id']]
+            else:
+                data.structure_id = [str(i)]
             data.structure_id = [struc['structure_id']]
             data.z = torch.LongTensor(struc['atomic_numbers'])
             data.forces = torch.tensor(struc['forces'])
             data.stress = torch.tensor(struc['stress'])
             #optional
             data.u = torch.tensor(np.zeros((3))[np.newaxis, ...]).float()
-            if 'y' not in struc:
-                if 'relaxed_energy' in struc:
-                    data.y = np.array([struc['relaxed_energy']])
-                elif 'energy' in struc:
-                    data.y = np.array([struc['energy']])
-                elif 'potential_energy' in struc:
-                    data.y = np.array([struc['potential_energy']])
-            else:
-                data.y = np.array([struc['y']])
-            data.y = torch.tensor(data.y).float()
+            data.y = torch.tensor(np.array([struc['potential_energy']])).float()
             if data.y.dim() == 1:
                 data.y = data.y.unsqueeze(0)
-            if forces:
-                data.forces = torch.tensor(struc['forces'])
-                if 'stress' in struc:
-                    data.stress = torch.tensor(struc['stress']) 
+            #if forces:
+            #    data.forces = torch.tensor(struc['forces'])
+            #    if 'stress' in struc:
+            #        data.stress = torch.tensor(struc['stress']) 
         dataset = {"full": new_data_list}
         return dataset
 
@@ -138,7 +154,7 @@ class MDL_FF(ForceField):
         output["potential_energy"] = torch.mean(out_stack, dim=0)          
         output["potential_energy_uncertainty"] = torch.std(out_stack, dim=0)          
         #output is a dict        
-        return output
+        return output                
         
     def create_ase_calc(self):
         """
@@ -149,28 +165,33 @@ class MDL_FF(ForceField):
 
     def optimize(self, atoms, steps, objective_func, log_per, learning_rate, num_structures=-1, batch_size=4, device='cpu'):
         data_list = self.atoms_to_data(atoms)
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")        
         for i in range(len(self.trainer.model)):
             self.trainer.model[i].gradient = False
         # Created a data list
         loader = DataLoader(data_list, batch_size=batch_size)
         loader_iter = iter(loader)
         res_atoms = []
-        res_energy = []
+        res_energy = []                      
+        
         for i in range(len(loader_iter)):
             batch = next(loader_iter).to(device)
             pos, cell = batch.pos, batch.cell
             
-            opt = torch.optim.LBFGS([pos, cell], lr=learning_rate)
+            opt = torch.optim.LBFGS([pos, cell], lr=learning_rate, max_iter=25)
 
             pos.requires_grad_(True)
             cell.requires_grad_(True)
 
             def closure(step, temp):
                 opt.zero_grad()
-                output = self._forward(batch.to(device))
+                output = self._forward(batch.to(device)) 
                 loss = objective_func(output)
-                loss.mean().backward(retain_graph=True)
+                loss.mean().backward(retain_graph=True)          
+                #energies = self._forward(batch.to(device))["potential_energy"]          
+                #mean_energy = energies.mean()
+                #mean_energy.backward(retain_graph=True)
+ 
                 if log_per > 0 and step[0] % log_per == 0:
                     print("{0:4d}   {1: 3.6f}".format(step[0], loss.mean().item()))
                 step[0] += 1
@@ -184,9 +205,10 @@ class MDL_FF(ForceField):
                 opt.step(lambda: closure(step, temp))
             res_atoms.extend(self.data_to_atoms(batch))
             res_energy.extend(temp[0].cpu().detach().numpy())
+       
+        for i in range(len(self.trainer.model)):
+            self.trainer.model[i].gradient = True           
 
-        for i in range(len(self.model)):
-            self.model[i].gradient = True
         return res_atoms, res_energy
     
     def atoms_to_data(self, atoms):
@@ -197,7 +219,7 @@ class MDL_FF(ForceField):
             data = atoms[i]
 
             pos = torch.tensor(data.get_positions(), dtype=torch.float)
-            cell = torch.tensor([data.cell[:]], dtype=torch.float)
+            cell = torch.tensor(np.array([data.cell[:]]), dtype=torch.float)
             atomic_numbers = torch.LongTensor(data.numbers)
             structure_id = 0
                     
@@ -345,4 +367,21 @@ class MDL_FF(ForceField):
         self.trainer.scheduler = BaseTrainer._load_scheduler(self.train_config["optim"]["scheduler"], self.trainer.optimizer)
         self.trainer.loss = BaseTrainer._load_loss(self.train_config["optim"]["loss"])
         
-    
+    def load_saved_model(self, save_path):
+        """Loads the model from a checkpoint.pt file"""
+
+        # Load params from checkpoint
+        for i in range(len(self.trainer.model)):
+            model_path = os.path.join(save_path, f"checkpoint_{i}", "best_checkpoint.pt")    
+            checkpoint = torch.load(model_path)     
+            if str(self.trainer.rank) not in ("cpu", "cuda"):
+                self.trainer.model[i].module.load_state_dict(checkpoint["state_dict"])
+                self.trainer.best_model_state[i] = copy.deepcopy(self.trainer.model[i].module.state_dict())
+            else:
+                self.trainer.model[i].load_state_dict(checkpoint["state_dict"])
+                self.trainer.best_model_state[i] = copy.deepcopy(self.trainer.model[i].state_dict())
+        
+        print("model loaded successfully")
+
+
+       
