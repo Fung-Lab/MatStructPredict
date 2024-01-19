@@ -15,6 +15,7 @@ from ase import io
 #return dataset class or dict
 my_dataset = download_dataset(repo="MP", save=True)
 #or load dataset from disk:
+
 #my_dataset = load_dataset(path ="path/to/dataset")
 my_dataset = json.load(open("../data/data_subset_msp.json", "r"))
 #print(my_dataset[0])
@@ -25,21 +26,23 @@ train_config = 'mdl_config.yml'
 forcefield = MDL_FF(train_config, my_dataset)
 #train the forcefield (optional)
 forcefield.train(my_dataset, .09, .05, .05, max_epochs=1)
-#forcefield.load_saved_model("saved_model")
+#to load saved model, use update and put the path to file in checkpoint_path in the train_config
 #forcefield.update(my_dataset, .09, .05, .05, max_epochs=1)
+
 #active learning loop
 for i in range(0, max_iterations):
     #sample composition using a built in random sampler that checks for repeats in the dataset
     #returns a list of compositions, could be length 1 or many
     #compositions are a dictionary of {element:amount}
-    compositions = sample_random_composition(dataset=my_dataset, n=32)
-    #or manually specify the list of dict:
-    #compositions=[{'Ti':2, 'O':1}, {'Al':2, 'O':3}]
+    #compositions = sample_random_composition(dataset=my_dataset, n=1)
+    #or manually specify the list of lists:
+    compositions=[[22, 8, 8]]
     
 
     #forcefield itself is not an ase calculator, but can be used to return the MDLCalculator class
-    #forcefield_calc = forcefield.create_ase_calc()
+    forcefield_calc = forcefield.create_ase_calc()
     #initialize the predictor class, this is the BasinHopping version which uses an ASE calculator, but we can have another version for batched search
+
     #predictor = BasinHoppingASE(forcefield_calc, hops=1, steps=100, optimizer="FIRE", dr=0.5)
     predictor = BasinHopping(forcefield, hops=3, steps=20, dr=.5)
     #alternatively if we dont use ASE, we can optimize in batch, and optimize over multiple objectives as well
@@ -51,14 +54,12 @@ for i in range(0, max_iterations):
     for j, minima in enumerate(minima_list):
         filename = "iteration_"+str(i)+"_structure_"+str(j)+".cif"
         ase.io.write(filename, minima)
-
     
-    # ---Optimizing structures one at a time--- 
-    #predict structure returns a list of minima, could be 1 or many
-    # minima_list=[]
-    # for j in range(0, len(compositions)):
-    #     putative_minima = predictor.predict(compositions[j], topk=1)
-    #     minima_list.append(putative_minima[0])
+    #predict structures using BasinHoppingASE
+    #minima_list=[]
+    #for j in range(0, len(compositions)):
+    #    putative_minima = predictor.predict(compositions[j], topk=1)
+    #    minima_list.append(putative_minima[0])
     
     
     #validate with DFT on-demand on the putative minima

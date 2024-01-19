@@ -31,4 +31,5 @@ class Uncertainty(torch.nn.Module):
         pass
                 
     def forward(self, model_output):    
+      
         return model_output["potential_energy_uncertainty"]        

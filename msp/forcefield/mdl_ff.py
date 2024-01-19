@@ -31,7 +31,12 @@ class MDL_FF(ForceField):
         self.dataset = {}
         dataset = self.process_data(dataset)
         dataset = dataset['full']
-        self.dataset["train"] = dataset
+        self.dataset["train"], self.dataset["val"], self.dataset["test"] = dataset_split(
+                    dataset,
+                    self.train_config['dataset']['train_ratio'],
+                    self.train_config['dataset']['val_ratio'],
+                    self.train_config['dataset']['test_ratio'],
+                )
         self.trainer = self.from_config_train(self.train_config, self.dataset)
         #self.model = self.trainer.model
     
@@ -49,9 +54,7 @@ class MDL_FF(ForceField):
                     val_ratio,
                     test_ratio,
                 )
-        #temporary solution to initialize an entirely new model needed
-        self.update_trainer(self.dataset, max_epochs, lr, batch_size)
-        #self.model = self.trainer.model
+        self.trainer = self.from_config_train(self.train_config, self.dataset, max_epochs, lr, batch_size)
         self.trainer.train()
         
         #state = {"state_dict": self.model.state_dict()}
@@ -112,13 +115,17 @@ class MDL_FF(ForceField):
             data.n_atoms = len(struc['atomic_numbers'])
             data.pos = torch.tensor(struc['positions'])
             #check cell dimensions
-            data.cell = torch.tensor([struc['cell']])
+            #data.cell = torch.tensor([struc['cell']])
+            data.cell = torch.tensor(np.array(struc['cell']), dtype=torch.float).view(1, 3, 3)
+            if (np.array(data.cell) == np.array([[0.0, 0.0, 0.0],[0.0, 0.0, 0.0],[0.0, 0.0, 0.0]])).all():
+                data.cell = torch.zeros((3,3)).unsqueeze(0)
             #structure id optional or null
             if 'structure_id' in struc:
                 data.structure_id = [struc['structure_id']]
             else:
                 data.structure_id = [str(i)]
-            data.z = torch.tensor(struc['atomic_numbers'])
+            data.structure_id = [struc['structure_id']]
+            data.z = torch.LongTensor(struc['atomic_numbers'])
             data.forces = torch.tensor(struc['forces'])
             data.stress = torch.tensor(struc['stress'])
             #optional
@@ -161,7 +168,6 @@ class MDL_FF(ForceField):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")        
         for i in range(len(self.trainer.model)):
             self.trainer.model[i].gradient = False
-
         # Created a data list
         loader = DataLoader(data_list, batch_size=batch_size)
         loader_iter = iter(loader)
@@ -181,12 +187,11 @@ class MDL_FF(ForceField):
                 opt.zero_grad()
                 output = self._forward(batch.to(device)) 
                 loss = objective_func(output)
-                loss.mean().backward(retain_graph=True)
-                
+                loss.mean().backward(retain_graph=True)          
                 #energies = self._forward(batch.to(device))["potential_energy"]          
                 #mean_energy = energies.mean()
                 #mean_energy.backward(retain_graph=True)
-                
+ 
                 if log_per > 0 and step[0] % log_per == 0:
                     print("{0:4d}   {1: 3.6f}".format(step[0], loss.mean().item()))
                 step[0] += 1
@@ -200,11 +205,10 @@ class MDL_FF(ForceField):
                 opt.step(lambda: closure(step, temp))
             res_atoms.extend(self.data_to_atoms(batch))
             res_energy.extend(temp[0].cpu().detach().numpy())
-
-                
+       
         for i in range(len(self.trainer.model)):
             self.trainer.model[i].gradient = True           
-             
+
         return res_atoms, res_energy
     
     def atoms_to_data(self, atoms):
@@ -235,7 +239,7 @@ class MDL_FF(ForceField):
             curr += batch.n_atoms[i]
         return res
     
-    def from_config_train(self, config, dataset):
+    def from_config_train(self, config, dataset, max_epochs=None, lr=None, batch_size=None):
         """Class method used to initialize PropertyTrainer from a config object
         config has the following sections:
             trainer
@@ -257,6 +261,10 @@ class MDL_FF(ForceField):
         else:
             rank = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             local_world_size = 1
+        if lr is not None:
+            self.train_config["optim"]["lr"] = lr
+        if batch_size is not None:
+            self.train_config["optim"]["batch_size"] = batch_size
         model = BaseTrainer._load_model(config["model"], config["dataset"]["preprocess_params"], self.dataset, local_world_size, rank)
         optimizer = BaseTrainer._load_optimizer(config["optim"], model, local_world_size)
         sampler = BaseTrainer._load_sampler(config["optim"], self.dataset, local_world_size, rank)
@@ -267,11 +275,10 @@ class MDL_FF(ForceField):
             sampler,
             config["task"]["run_mode"],
             config["model"],
-        )     
-        
+        )
         scheduler = BaseTrainer._load_scheduler(config["optim"]["scheduler"], optimizer)
         loss = BaseTrainer._load_loss(config["optim"]["loss"])
-        max_epochs = config["optim"]["max_epochs"]
+        max_epochs = config["optim"]["max_epochs"] if max_epochs is None else max_epochs
         clip_grad_norm = config["optim"].get("clip_grad_norm", None)
         verbosity = config["optim"].get("verbosity", None)
         batch_tqdm = config["optim"].get("batch_tqdm", False)
@@ -287,8 +294,8 @@ class MDL_FF(ForceField):
 
         if local_world_size > 1:
             dist.barrier()
-            
-        return PropertyTrainer(
+
+        trainer = PropertyTrainer(
             model=model,
             dataset=dataset,
             optimizer=optimizer,
@@ -309,6 +316,14 @@ class MDL_FF(ForceField):
             checkpoint_path=checkpoint_path,
             use_amp=config["task"].get("use_amp", False),
         )
+        use_checkpoint = config["task"].get("continue_job", False)
+        if use_checkpoint:
+            print("Attempting to load checkpoint...")
+            trainer.load_checkpoint(config["task"].get("load_training_state", True))
+            print("loaded from", checkpoint_path)
+            print("Recent checkpoint loaded successfully.")
+
+        return trainer
     
     def update_trainer(self, dataset, max_epochs=None, lr=None, batch_size=None):
         """Class method used to initialize PropertyTrainer from a config object
