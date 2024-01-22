@@ -22,7 +22,7 @@ class Optimizer(ABC):
         """
         pass
 
-    def atom_from_comp(self, composition, cell):
+    def atom_from_comp(self, composition):
         """
         Creates an ASE atoms object from a composition list
         
@@ -32,6 +32,7 @@ class Optimizer(ABC):
         Returns:
             ase.Atoms: An ASE atoms object representing the composition
         """
+        cell=[5, 5, 5, 90, 90, 90]
         atoms = Atoms(composition, cell=cell, pbc=(True, True, True))
         scaled_positions = np.random.uniform(0., 1., (len(atoms), 3))
         atoms.set_scaled_positions(scaled_positions)

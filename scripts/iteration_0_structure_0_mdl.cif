@@ -1,12 +1,12 @@
 data_image0
 _chemical_formula_structural       Ti2O4
 _chemical_formula_sum              "Ti2 O4"
-_cell_length_a       3.22088
-_cell_length_b       7.89577
-_cell_length_c       3.72667
-_cell_angle_alpha    49.1466
-_cell_angle_beta     71.9573
-_cell_angle_gamma    87.4603
+_cell_length_a       2.98599
+_cell_length_b       14.0393
+_cell_length_c       10.5515
+_cell_angle_alpha    24.0417
+_cell_angle_beta     25.6241
+_cell_angle_gamma    24.709
 
 _space_group_name_H-M_alt    "P 1"
 _space_group_IT_number       1
@@ -23,9 +23,9 @@ loop_
   _atom_site_fract_y
   _atom_site_fract_z
   _atom_site_occupancy
-  Ti  Ti1       1.0  0.54664  0.48545  0.66661  1.0000
-  Ti  Ti2       1.0  0.92248  0.98609  0.25424  1.0000
-  O   O1        1.0  0.73064  0.93312  0.92713  1.0000
-  O   O2        1.0  0.91727  0.29087  0.90249  1.0000
-  O   O3        1.0  0.63608  0.63063  0.88634  1.0000
-  O   O4        1.0  0.93940  0.29685  0.86962  1.0000
+  Ti  Ti1       1.0  0.59692  0.76187  0.27650  1.0000
+  Ti  Ti2       1.0  0.65477  0.22643  0.46479  1.0000
+  O   O1        1.0  0.85531  0.48636  0.21199  1.0000
+  O   O2        1.0  0.20195  0.56018  0.52710  1.0000
+  O   O3        1.0  0.12643  0.00987  0.93379  1.0000
+  O   O4        1.0  0.14234  0.01279  0.42490  1.0000

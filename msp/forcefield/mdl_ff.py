@@ -8,6 +8,7 @@ import yaml
 import os
 import copy
 import gc
+import time
 from torch import distributed as dist
 from ase import Atoms
 from matdeeplearn.common.registry import registry
@@ -163,7 +164,7 @@ class MDL_FF(ForceField):
         calculator = MDLCalculator(config=self.train_config)        
         return calculator
 
-    def optimize(self, atoms, steps, objective_func, log_per, learning_rate, num_structures=-1, batch_size=4, device='cpu'):
+    def optimize(self, atoms, steps, objective_func, log_per, learning_rate, num_structures=-1, batch_size=4, device='cpu', cell_relax=True):
         data_list = self.atoms_to_data(atoms)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")        
         for i in range(len(self.trainer.model)):
@@ -173,7 +174,7 @@ class MDL_FF(ForceField):
         loader_iter = iter(loader)
         res_atoms = []
         res_energy = []                      
-        
+        print("device:", device)                       
         for i in range(len(loader_iter)):
             batch = next(loader_iter).to(device)
             pos, cell = batch.pos, batch.cell
@@ -181,9 +182,11 @@ class MDL_FF(ForceField):
             opt = torch.optim.LBFGS([pos, cell], lr=learning_rate, max_iter=25)
 
             pos.requires_grad_(True)
-            cell.requires_grad_(True)
+            if cell_relax:
+                cell.requires_grad_(True)
 
             def closure(step, temp):
+                start_time = time.time()
                 opt.zero_grad()
                 output = self._forward(batch.to(device)) 
                 loss = objective_func(output)
@@ -191,9 +194,10 @@ class MDL_FF(ForceField):
                 #energies = self._forward(batch.to(device))["potential_energy"]          
                 #mean_energy = energies.mean()
                 #mean_energy.backward(retain_graph=True)
- 
-                if log_per > 0 and step[0] % log_per == 0:
-                    print("{0:4d}   {1: 3.6f}".format(step[0], loss.mean().item()))
+                curr_time = time.time() - start_time
+                if log_per > 0 and step[0] % log_per == 0:                    
+                    #print("{}  {0:4d}   {1: 3.6f}".format(output, step[0], loss.mean().item()))      
+                    print(len(batch.structure_id), step[0], loss.mean().item(), curr_time)              
                 step[0] += 1
                 batch.pos, batch.cell = pos, cell
                 temp[0] = loss
@@ -201,7 +205,7 @@ class MDL_FF(ForceField):
 
             temp = [0]
             step = [0]
-            for _ in range(steps):
+            for _ in range(steps):                
                 opt.step(lambda: closure(step, temp))
             res_atoms.extend(self.data_to_atoms(batch))
             res_energy.extend(temp[0].cpu().detach().numpy())
@@ -221,7 +225,7 @@ class MDL_FF(ForceField):
             pos = torch.tensor(data.get_positions(), dtype=torch.float)
             cell = torch.tensor(np.array([data.cell[:]]), dtype=torch.float)
             atomic_numbers = torch.LongTensor(data.numbers)
-            structure_id = 0
+            structure_id = str(i)
                     
             data_list[i].n_atoms = len(atomic_numbers)
             data_list[i].pos = pos
