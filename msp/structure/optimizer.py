@@ -37,3 +37,27 @@ class Optimizer(ABC):
         scaled_positions = np.random.uniform(0., 1., (len(atoms), 3))
         atoms.set_scaled_positions(scaled_positions)
         return atoms
+
+    def atoms_to_dict(self, atoms, energy, uncertainty=None):
+        """
+        Creates a list of dict from a list of ASE atoms objects
+        
+        Args:
+            atoms (list): A list of ASE atoms objects
+            energy (list): A list of predicted energies for each ASE atoms object.
+        
+        Returns:
+            list: Contains atoms represented as dicts
+        """
+        res = [{} for _ in atoms]
+        if uncertainty is None:
+            uncertainty = [None] * len(atoms)
+        for i, d in enumerate(res):
+            d['n_atoms'] = len(atoms[i].get_atomic_numbers())
+            d['pos'] = atoms[i].get_positions()
+            d['cell'] = atoms[i].get_cell()
+            d['z'] = atoms[i].get_atomic_numbers()
+            d['atomic_numbers'] = atoms[i].get_atomic_numbers()
+            d['energy'] = energy[i]
+            d['uncertainty'] = uncertainty[i]
+        return res

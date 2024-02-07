@@ -4,8 +4,10 @@ from time import time
 import numpy as np
 from copy import deepcopy
 from abc import ABC, abstractmethod
-from ase import Atom
+from ase import Atom, Atoms
 from ase.constraints import ExpCellFilter
+import gc
+import torch
 
 
 class BasinHoppingBase(Optimizer):
@@ -18,6 +20,8 @@ class BasinHoppingBase(Optimizer):
             hops (int, optional): Number of basin hops. Defaults to 5.
             steps (int, optional): Number of steps per basin hop. Defaults to 100.
             optimizer (str, optional): Optimizer to use for each step. Defaults to "FIRE".
+            dr (int, optional): rate at which to change values
+            max_atom_num (int, optional): maximum atom number to be considered
         """
         super().__init__(name, hops=hops, steps=steps, optimizer=optimizer, dr=dr, **kwargs)
         self.steps = steps
@@ -33,16 +37,29 @@ class BasinHoppingBase(Optimizer):
         #self.perturbs.append(self.swapAtom)
     
     def perturbPos(self, atoms, **kwargs):
-        disp = np.random.uniform(-1., 1., (len(atoms), 3)) * self.dr
-        atoms.set_positions(atoms.get_positions() + disp)
+        """
+        Perturbs the positions of the atoms in the structure
+        """
+        if isinstance(atoms, ExpCellFilter):
+            disp = np.random.uniform(-1., 1., (len(atoms.atoms), 3)) * self.dr
+            atoms.atoms.set_scaled_positions(atoms.atoms.get_scaled_positions() + disp)
+        else:  
+            disp = np.random.uniform(-1., 1., (len(atoms), 3)) * self.dr
+            atoms.set_scaled_positions(atoms.get_scaled_positions() + disp) 
         
 
     def perturbCell(self, atoms, **kwargs):
+        """
+        Perturbs the cell of the atoms in the structure
+        """
         disp = np.random.uniform(-1., 1., (3, 3)) * self.dr
         atoms.set_cell(atoms.get_cell()[:] + disp)
         
 
     def perturbAtomicNum(self, atoms, num_atoms_perturb=1, **kwargs):
+        """
+        Perturbs the atomic numbers of the atoms in the structure
+        """
         atoms_to_perturb = np.random.randint(len(atoms), size=num_atoms_perturb)
         new_atoms = np.random.randint(1, self.max_atom_num, size=num_atoms_perturb)
         atom_list = atoms.get_atomic_numbers()
@@ -50,15 +67,24 @@ class BasinHoppingBase(Optimizer):
         atoms.set_atomic_numbers(atom_list)
 
     def addAtom(self, atoms, **kwargs):
+        """
+        Adds an atom to the structure
+        """
         atoms.append(Atom(np.random.randint(1, self.max_atom_num), position=(0, 0, 0)))
         pos = atoms.get_scaled_positions()
         pos[-1] = np.random.uniform(0., 1., (1, 3))
         atoms.set_scaled_positions(pos)
     
     def removeAtom(self, atoms, **kwargs):
+        """
+        Removes an atom from the structure
+        """
         atoms.pop(np.random.randint(len(atoms)))
 
     def swapAtom(self, atoms, **kwargs):
+        """
+        Swaps two atoms in the structure
+        """
         nums = atoms.get_atomic_numbers()
         rand_ind = np.random.randint(len(atoms), size=2)
         nums[rand_ind[0]], nums[rand_ind[1]] = nums[rand_ind[1]], nums[rand_ind[0]]
@@ -74,23 +100,30 @@ class BasinHoppingASE(BasinHoppingBase):
 
     def __init__(self, forcefield, hops=5, steps=100, optimizer="FIRE", dr=.5, max_atom_num=101, **kwargs):
         """
-        Initialize the basin hopping optimizer.
+        Initialize the basinhoppingASE optimizer, which uses an ASE calculator to optimize structures one at a time.
 
         Args:
-            calculator: ASE calculator to use for the optimization
+            forcefield: Takes a forcefield object with a create_ase_calc() function for the caclculator
             hops (int, optional): Number of basin hops. Defaults to 5.
             steps (int, optional): Number of steps per basin hop. Defaults to 100.
             optimizer (str, optional): Optimizer to use for each step. Defaults to "FIRE".
+            dr (int, optional): rate at which to change values. Defaults to .5.
+            max_atom_num (int, optional): maximum atom number to be considered, exclusive. Defaults to 101.
         """
+
         super().__init__("BasinHoppingASE", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, **kwargs)
         self.calculator = forcefield.create_ase_calc()
 
-    def predict(self, compositions, init_structures=None, cell_relax=True, topk=1, max_atom_num=101, num_atoms_perturb=1):
+    def predict(self, compositions, init_structures=None, cell_relax=True, topk=1, num_atoms_perturb=1):
         """
-        Optimizes the composition using the basin hopping optimizer
+        Optimizes the list of compositions one at a time using the an ASE Calculator
 
         Args:
-            composition (str): A string representing a chemical composition
+            compositions (list): A list of compositions, which are lists of atomic numbers
+            init_structures (list, optional): Initialized ase atoms structures to use instead of creating randomized structures. Defaults to None
+            cell_relax (bool, optional): whether to relax cell or not. Defaults to True.
+            topk (int, optional): Number of best performing structures to save per composition. Defaults to 1.
+            num_atoms_perturb (int, optional): number of atoms to perturb for perturbAtomicNum. Defaults to 1.
 
         Returns:
             list: A list of ase.Atoms objects representing the predicted minima
@@ -112,8 +145,9 @@ class BasinHoppingASE(BasinHoppingBase):
         for index, atom in enumerate(curr_atoms):
             atom.set_calculator(self.calculator)
             if cell_relax:
-                atom = ExpCellFilter(atom)           
-            min_energy[index] = atom.get_potential_energy(force_consistent=False)            
+                atom = ExpCellFilter(atom)
+            min_energy[index] = atom.get_potential_energy(force_consistent=False)
+            print('Structure', index)        
             for i in range(self.hops):
                 oldEnergy = atom.get_potential_energy(force_consistent=False)
                 optimizer = FIRE(atom, logfile=None)
@@ -123,27 +157,55 @@ class BasinHoppingASE(BasinHoppingBase):
                 num_steps = optimizer.get_number_of_steps()
                 time_per_step = (end_time - start_time) / num_steps if num_steps != 0 else 0
                 optimizedEnergy = atom.get_potential_energy(force_consistent=False)
-                print('HOP', i, 'took', end_time - start_time, 'seconds')
-                print('HOP', i, 'old energy', oldEnergy)
-                print('HOP', i, 'optimized energy', optimizedEnergy)
+                print('\tHOP', i, 'took', end_time - start_time, 'seconds')
+                print('\tHOP', i, 'previous energy', oldEnergy)
+                print('\tHOP', i, 'optimized energy', optimizedEnergy)
                 if optimizedEnergy < min_energy[index]:
                     min_atoms[index] = atom.copy()
                     min_energy[index] = optimizedEnergy
                 self.perturbs[np.random.randint(len(self.perturbs))](atom, num_atoms_perturb=num_atoms_perturb)
-            print('Min energy', min_energy[index])
-
-        return min_atoms
+                gc.collect()
+                torch.cuda.empty_cache()
+            
+            print('Structure', index, 'Min energy', min_energy[index])
+        result = self.atoms_to_dict(min_atoms, min_energy)
+        return result
         
         
 class BasinHopping(BasinHoppingBase):
-    def __init__(self, forcefield, hops=5, steps=100, optimizer="FIRE", dr=.5, max_atom_num=101, **kwargs):
+    def __init__(self, forcefield, hops=5, steps=100, optimizer="Adam", dr=.5, max_atom_num=101, **kwargs):
         """
-        Initialize
+        Initialize the basinhopping optimizer, which uses a forcefield to optimize batches
+
+        Args:
+            forcefield: Takes a forcefield object with a create_ase_calc() function for the caclculator
+            hops (int, optional): Number of basin hops. Defaults to 5.
+            steps (int, optional): Number of steps per basin hop. Defaults to 100.
+            optimizer (str, optional): Optimizer to use for each step. Defaults to "Adam".
+            dr (int, optional): rate at which to change values. Defaults to .5.
+            max_atom_num (int, optional): maximum atom number to be considered, exclusive. Defaults to 101.
         """
         super().__init__("BasinHopping", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, **kwargs)
         self.forcefield = forcefield
     
-    def predict(self, compositions, objective_func, init_structures=None, cell_relax=True, topk=1, batch_size=4, log_per=50, lr=.05, num_atoms_perturb=1):
+    def predict(self, compositions, objective_func, init_structures=None, cell_relax=True, topk=1, batch_size=4, log_per=0, lr=.05, num_atoms_perturb=1):
+        """
+        Optimizes the list of compositions in batches 
+
+        Args:
+            compositions (list): A list of compositions, which are lists of atomic numbers
+            objective_func (func): An evaluation method to compare structures on some basis
+            init_structures (list, optional): Initialized ase atoms structures to use instead of creating randomized structures. Defaults to None
+            cell_relax (bool, optional): whether to relax cell or not. Defaults to True.
+            topk (int, optional): Number of best performing structures to save per composition. Defaults to 1.
+            batch_size (int, optional): Batch_size for optimization. Deafults to 4
+            log_per (int, optional): Print log messages for every log_per steps. Defaults to 0 (no logging).
+            lr (int, optional): Learning rate for optimizer. Defaults to .5.
+            num_atoms_perturb (int, optional): number of atoms to perturb for perturbAtomicNum
+
+        Returns:
+            list: A list of ase.Atoms objects representing the predicted minima
+        """
         if init_structures:
             atoms = init_structures
         else:
@@ -153,20 +215,24 @@ class BasinHopping(BasinHoppingBase):
         min_atoms = deepcopy(atoms)
         min_energy = [1e10] * len(min_atoms)
         for i in range(self.hops):
-            print("Hop", i)
-            newAtoms, newEnergy = self.forcefield.optimize(atoms, self.steps, objective_func, log_per, lr, batch_size=batch_size, cell_relax=cell_relax)
+            start_time = time()
+            newAtoms, newEnergy, prev_energy = self.forcefield.optimize(atoms, self.steps, objective_func, log_per, lr, batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer)
+            end_time = time()
+            print('HOP', i, 'took', end_time - start_time, 'seconds')
             for j in range(len(newAtoms)):
+                print('\tStructure', j)
+                print('\t\tHOP', i, 'previous energy', prev_energy[j])
+                print('\t\tHOP', i, 'optimized energy', newEnergy[j])  
                 if newEnergy[j] < min_energy[j]:
-                    print('Atom changed: index ', j)
-                    print(min_atoms[j])
-                    print(min_energy[j])
-                    print(newAtoms[j])
-                    print(newEnergy[j])
                     min_energy[j] = newEnergy[j]
                     min_atoms[j] = newAtoms[j].copy()
             atoms = deepcopy(min_atoms)
+            print('HOP', i, 'took', end_time - start_time, 'seconds')
             for j in range(len(atoms)):
                 self.perturbs[np.random.randint(len(self.perturbs))](atoms[j], num_atoms_perturb=num_atoms_perturb)
+        for j in range(len(newAtoms)):
+            print('Structure', j, 'min energy', min_energy[j])
 
-        return min_atoms
+        result = self.atoms_to_dict(min_atoms, min_energy)
+        return result
 
