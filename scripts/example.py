@@ -33,7 +33,7 @@ forcefield = MDL_FF(train_config, my_dataset)
 
 predictor = BasinHoppingASE(forcefield, hops=5, steps=100, optimizer="FIRE", dr=0.5)
 
-predictor_batch = BasinHopping(forcefield, hops=5, steps=100, dr=0.5, batch_size=10)
+predictor_batch = BasinHopping(forcefield, hops=5, steps=100, dr=0.5, optimizer='Adam', batch_size=10)
 
 forcefield_mace = MACE_FF()
 predictor_mace = BasinHoppingASE(forcefield_mace, hops=5, steps=100, optimizer="FIRE", dr=0.5)
@@ -71,7 +71,7 @@ for i in range(0, max_iterations):
     #we do this by first initializing our objective function, which is similar to the loss function class in matdeeplearn
     #objective_func = UpperConfidenceBound(c=0.1)
     objective_func = Energy()
-    minima_list_batch = predictor_batch.predict(compositions, objective_func, init_structures=None, optim='Adam', batch_size=32)
+    minima_list_batch = predictor_batch.predict(compositions, objective_func, init_structures=None, batch_size=32)
     minima_list_batch = atoms_from_dict(minima_list_batch)
     for j, minima in enumerate(minima_list_batch):
         filename = "iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"

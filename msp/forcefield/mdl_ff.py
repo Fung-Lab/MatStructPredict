@@ -235,11 +235,8 @@ class MDL_FF(ForceField):
         for i in range(len(loader_iter)):
             batch = next(loader_iter).to(device)
             pos, cell = batch.pos, batch.cell
-            
-            if optim == 'LBFGS':
-                opt = torch.optim.LBFGS([pos, cell], lr=learning_rate, max_iter=25)
-            else:
-                opt = torch.optim.Adam([pos, cell], lr=learning_rate)
+
+            opt = getattr(torch.optim, optim, 'Adam')([pos, cell], lr=learning_rate)
 
             pos.requires_grad_(True)
             if cell_relax:

@@ -1,5 +1,5 @@
 from msp.structure.optimizer import Optimizer
-from ase.optimize import FIRE
+import ase.optimize
 from time import time
 import numpy as np
 from copy import deepcopy
@@ -30,6 +30,7 @@ class BasinHoppingBase(Optimizer):
         self.max_atom_num = max_atom_num
         self.perturbs = []
         self.perturbs.append(self.perturbPos)
+        self.optimizer = optimizer
         #self.perturbs.append(self.perturbCell)
         #self.perturbs.append(self.perturbAtomicNum)
         #self.perturbs.append(self.addAtom)
@@ -150,7 +151,7 @@ class BasinHoppingASE(BasinHoppingBase):
             print('Structure', index)        
             for i in range(self.hops):
                 oldEnergy = atom.get_potential_energy(force_consistent=False)
-                optimizer = FIRE(atom, logfile=None)
+                optimizer = getattr(ase.optimize, self.optimizer, 'FIRE')(atom, logfile=None)
                 start_time = time()
                 optimizer.run(fmax=0.001, steps=self.steps)
                 end_time = time()
