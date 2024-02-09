@@ -115,7 +115,7 @@ class BasinHoppingASE(BasinHoppingBase):
         super().__init__("BasinHoppingASE", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, **kwargs)
         self.calculator = forcefield.create_ase_calc()
 
-    def predict(self, compositions, init_structures=None, cell_relax=True, topk=1, num_atoms_perturb=1):
+    def predict(self, compositions, init_structures=None, cell_relax=True, topk=1, num_atoms_perturb=1, density=.2):
         """
         Optimizes the list of compositions one at a time using the an ASE Calculator
 
@@ -134,7 +134,7 @@ class BasinHoppingASE(BasinHoppingBase):
         else:
             atoms = []
             for comp in compositions:
-                atoms.append(self.atom_from_comp(comp))
+                atoms.append(self.atom_from_comp(comp, density))
         #atoms = self.atom_from_comp(composition, cell)    
         #atoms.set_calculator(self.calculator)
 
@@ -189,7 +189,7 @@ class BasinHopping(BasinHoppingBase):
         super().__init__("BasinHopping", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, **kwargs)
         self.forcefield = forcefield
     
-    def predict(self, compositions, objective_func, init_structures=None, cell_relax=True, topk=1, batch_size=4, log_per=0, lr=.05, num_atoms_perturb=1):
+    def predict(self, compositions, objective_func, init_structures=None, cell_relax=True, topk=1, batch_size=4, log_per=0, lr=.05, density=.2, num_atoms_perturb=1):
         """
         Optimizes the list of compositions in batches 
 
@@ -212,7 +212,7 @@ class BasinHopping(BasinHoppingBase):
         else:
             atoms = []
             for comp in compositions:
-                atoms.append(self.atom_from_comp(comp))
+                atoms.append(self.atom_from_comp(comp, density))
         min_atoms = deepcopy(atoms)
         min_energy = [1e10] * len(min_atoms)
         for i in range(self.hops):

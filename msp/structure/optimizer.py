@@ -22,7 +22,7 @@ class Optimizer(ABC):
         """
         pass
 
-    def atom_from_comp(self, composition):
+    def atom_from_comp(self, composition, density=.2):
         """
         Creates an ASE atoms object from a composition list
         
@@ -32,8 +32,22 @@ class Optimizer(ABC):
         Returns:
             ase.Atoms: An ASE atoms object representing the composition
         """
-        cell=[5, 5, 5, 90, 90, 90]
+        beta = np.random.uniform(0, 180)
+        gamma = np.random.uniform(0, 180)
+        minCosA = - np.sin(gamma * np.pi/180) * np.sqrt(1 - np.cos(beta* np.pi/180) ** 2) + np.cos(beta * np.pi/180) * np.cos(gamma * np.pi/180)
+        maxCosA = np.sin(gamma * np.pi/180) * np.sqrt(1 - np.cos(beta* np.pi/180) ** 2) + np.cos(beta * np.pi/180) * np.cos(gamma * np.pi/180)
+        alpha = np.random.uniform(minCosA, maxCosA)
+        alpha = np.arccos(alpha) * 180 / np.pi
+        a = np.random.rand() + .000001
+        b = np.random.rand() + .000001
+        c = np.random.rand() + .000001
+        cell=[a, b, c, alpha, beta, gamma]
         atoms = Atoms(composition, cell=cell, pbc=(True, True, True))
+        vol = atoms.get_cell().volume
+        ideal_vol = len(composition) / density
+        scale = (ideal_vol / vol) ** (1/3)
+        cell = [scale * a, scale * b, scale * c, alpha, beta, gamma]
+        atoms.set_cell(cell)
         scaled_positions = np.random.uniform(0., 1., (len(atoms), 3))
         atoms.set_scaled_positions(scaled_positions)
         return atoms
