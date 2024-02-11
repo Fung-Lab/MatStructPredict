@@ -52,7 +52,7 @@ class Optimizer(ABC):
         atoms.set_scaled_positions(scaled_positions)
         return atoms
 
-    def atoms_to_dict(self, atoms, energy, uncertainty=None):
+    def atoms_to_dict(self, atoms, loss):
         """
         Creates a list of dict from a list of ASE atoms objects
         
@@ -64,14 +64,11 @@ class Optimizer(ABC):
             list: Contains atoms represented as dicts
         """
         res = [{} for _ in atoms]
-        if uncertainty is None:
-            uncertainty = [None] * len(atoms)
         for i, d in enumerate(res):
             d['n_atoms'] = len(atoms[i].get_atomic_numbers())
             d['pos'] = atoms[i].get_positions()
             d['cell'] = atoms[i].get_cell()
             d['z'] = atoms[i].get_atomic_numbers()
             d['atomic_numbers'] = atoms[i].get_atomic_numbers()
-            d['energy'] = energy[i]
-            d['uncertainty'] = uncertainty[i]
+            d['loss'] = loss[i]
         return res

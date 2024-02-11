@@ -229,8 +229,8 @@ class MDL_FF(ForceField):
         loader = DataLoader(data_list, batch_size=batch_size)
         loader_iter = iter(loader)
         res_atoms = []
-        res_energy = []     
-        old_energy = []                 
+        res_loss = []     
+        init_loss = []                 
         print("device:", device)                       
         for i in range(len(loader_iter)):
             batch = next(loader_iter).to(device)
@@ -270,13 +270,13 @@ class MDL_FF(ForceField):
                 # print('optimizer step time', time.time()-start_time)
                 # print('steps taken', step[0] - old_step)
             res_atoms.extend(self.data_to_atoms(batch))
-            res_energy.extend(temp[0].cpu().detach().numpy())
-            old_energy.extend(temp[1].cpu().detach().numpy())
+            res_loss.extend(temp[0].cpu().detach().numpy())
+            init_loss.extend(temp[1].cpu().detach().numpy())
        
         for i in range(len(self.trainer.model)):
             self.trainer.model[i].gradient = True           
 
-        return res_atoms, res_energy, old_energy
+        return res_atoms, res_loss, init_loss
     
     def atoms_to_data(self, atoms):
         """

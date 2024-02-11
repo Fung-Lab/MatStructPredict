@@ -214,26 +214,26 @@ class BasinHopping(BasinHoppingBase):
             for comp in compositions:
                 atoms.append(self.atom_from_comp(comp, density))
         min_atoms = deepcopy(atoms)
-        min_energy = [1e10] * len(min_atoms)
+        min_loss = [1e10] * len(min_atoms)
         for i in range(self.hops):
             start_time = time()
-            newAtoms, newEnergy, prev_energy = self.forcefield.optimize(atoms, self.steps, objective_func, log_per, lr, batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer)
+            newAtoms, new_loss, prev_loss = self.forcefield.optimize(atoms, self.steps, objective_func, log_per, lr, batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer)
             end_time = time()
             print('HOP', i, 'took', end_time - start_time, 'seconds')
             for j in range(len(newAtoms)):
                 print('\tStructure', j)
-                print('\t\tHOP', i, 'previous energy', prev_energy[j])
-                print('\t\tHOP', i, 'optimized energy', newEnergy[j])  
-                if newEnergy[j] < min_energy[j]:
-                    min_energy[j] = newEnergy[j]
+                print('\t\tHOP', i, 'previous energy', prev_loss[j])
+                print('\t\tHOP', i, 'optimized energy', new_loss[j])  
+                if new_loss[j] < min_loss[j]:
+                    min_loss[j] = new_loss[j]
                     min_atoms[j] = newAtoms[j].copy()
             atoms = deepcopy(min_atoms)
             print('HOP', i, 'took', end_time - start_time, 'seconds')
             for j in range(len(atoms)):
                 self.perturbs[np.random.randint(len(self.perturbs))](atoms[j], num_atoms_perturb=num_atoms_perturb)
         for j in range(len(newAtoms)):
-            print('Structure', j, 'min energy', min_energy[j])
+            print('Structure', j, 'min energy', min_loss[j])
 
-        result = self.atoms_to_dict(min_atoms, min_energy)
+        result = self.atoms_to_dict(min_atoms, min_loss)
         return result
 
