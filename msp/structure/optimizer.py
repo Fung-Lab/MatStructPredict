@@ -1,6 +1,7 @@
 from ase import Atoms
 from ase.data import atomic_numbers
 from abc import ABC, abstractmethod
+from pyxtal import pyxtal
 import numpy as np
 
 class Optimizer(ABC):
@@ -50,6 +51,17 @@ class Optimizer(ABC):
         atoms.set_cell(cell)
         scaled_positions = np.random.uniform(0., 1., (len(atoms), 3))
         atoms.set_scaled_positions(scaled_positions)
+        struc = pyxtal()
+        while(True):
+            try:
+                num = np.random.randint(1, 231)
+                print('testing', num)
+                struc.from_random(3, num, ['Ti', 'O'], [6, 12])
+                break
+            except:
+                print('Didnt work')
+                continue
+        atoms = struc.to_ase()
         return atoms
 
     def atoms_to_dict(self, atoms, loss):

@@ -1,6 +1,4 @@
 from msp.forcefield.base import ForceField
-import matgl
-from chgnet.model.dynamics import CHGNetCalculator
 from ase import Atoms
 
 
@@ -19,6 +17,8 @@ class CHGNet_FF(ForceField):
         pip install git+https://github.com/CederGroupHub/chgnet
         """
         ###throws error when using default device (GPU); input tensors may not be passed to the right device
+        from chgnet.model.dynamics import CHGNetCalculator
+        self.CHGNetCalculator = CHGNetCalculator
         
                     
     def train(self):
@@ -48,7 +48,7 @@ class CHGNet_FF(ForceField):
         """
         Returns ase calculator
         """
-        calculator = CHGNetCalculator()        
+        calculator = self.CHGNetCalculator()        
         return calculator
     
     def atoms_to_data(self):

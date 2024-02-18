@@ -1,5 +1,4 @@
 from msp.forcefield.base import ForceField
-from mace.calculators import mace_mp
 from ase import Atoms
 
 
@@ -14,6 +13,8 @@ class MACE_FF(ForceField):
         
         Or from source.
         """
+        from mace.calculators import mace_mp
+        self.mace_mp = mace_mp
         
                     
     def train(self):
@@ -43,7 +44,7 @@ class MACE_FF(ForceField):
         """
         Returns ase calculator
         """
-        calculator = mace_mp(model="large", dispersion=False, default_dtype="float32", device='cuda')        
+        calculator = self.mace_mp(model="large", dispersion=False, default_dtype="float32", device='cuda')        
         return calculator
     
     def atoms_to_data(self):

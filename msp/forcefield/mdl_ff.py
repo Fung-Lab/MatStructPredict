@@ -400,9 +400,11 @@ class MDL_FF(ForceField):
             use_amp=config["task"].get("use_amp", False),
         )
         use_checkpoint = config["task"].get("continue_job", False)
+        self.trainer = trainer
         if use_checkpoint:
             print("Attempting to load checkpoint...")
-            trainer.load_checkpoint(config["task"].get("load_training_state", True))
+            #trainer.load_checkpoint(config["task"].get("load_training_state", True))
+            self.load_saved_model(checkpoint_path)
             print("loaded from", checkpoint_path)
             print("Recent checkpoint loaded successfully.")
 
@@ -462,8 +464,9 @@ class MDL_FF(ForceField):
 
         # Load params from checkpoint
         for i in range(len(self.trainer.model)):
-            model_path = os.path.join(save_path, f"checkpoint_{i}", "best_checkpoint.pt")    
-            checkpoint = torch.load(model_path)     
+            model_path = os.path.join(save_path, f"checkpoint_{i}", "best_checkpoint.pt")  
+            model_path = save_path  
+            checkpoint = torch.load(model_path, map_location=torch.device(self.trainer.rank))     
             if str(self.trainer.rank) not in ("cpu", "cuda"):
                 self.trainer.model[i].module.load_state_dict(checkpoint["state_dict"])
                 self.trainer.best_model_state[i] = copy.deepcopy(self.trainer.model[i].module.state_dict())

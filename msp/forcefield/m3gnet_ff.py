@@ -1,6 +1,4 @@
 from msp.forcefield.base import ForceField
-import matgl
-from matgl.ext.ase import M3GNetCalculator
 from ase import Atoms
 
 
@@ -15,7 +13,10 @@ class M3GNet_FF(ForceField):
         
         Or from source.
         """
-        ###throws error when using default device (GPU); input tensors may not be passed to the right device        
+        ###throws error when using default device (GPU); input tensors may not be passed to the right device
+        import matgl
+        from matgl.ext.ase import M3GNetCalculator  
+        self.M3GNetCalculator = M3GNetCalculator
         self.pot = matgl.load_model("M3GNet-MP-2021.2.8-PES").to("cpu")        
         
                     
@@ -46,7 +47,7 @@ class M3GNet_FF(ForceField):
         """
         Returns ase calculator
         """
-        calculator = M3GNetCalculator(self.pot)        
+        calculator = self.M3GNetCalculator(self.pot)        
         return calculator
     
     def atoms_to_data(self):
