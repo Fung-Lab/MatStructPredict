@@ -1,4 +1,5 @@
-from msp.structure.optimizer import Optimizer
+from msp.optimizer.optimizer import Optimizer
+from msp.structure.structure_util import atoms_to_dict, dict_to_atoms
 import ase.optimize
 from time import time
 import numpy as np
@@ -141,12 +142,12 @@ class BasinHoppingASE(BasinHoppingBase):
         super().__init__("BasinHoppingASE", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, **kwargs)
         self.calculator = forcefield.create_ase_calc()
 
-    def predict(self, compositions, init_structures=None, cell_relax=True, topk=1, num_atoms_perturb=1, density=.2):
+    def predict(self, structures, cell_relax=True, topk=1, num_atoms_perturb=1, density=.2):
         """
         Optimizes the list of compositions one at a time using the an ASE Calculator
 
         Args:
-            compositions (list): A list of compositions, which are lists of atomic numbers
+            atoms (list): A list of dictionaries representing atomic structures
             init_structures (list, optional): Initialized ase atoms structures to use instead of creating randomized structures. Defaults to None
             cell_relax (bool, optional): whether to relax cell or not. Defaults to True.
             topk (int, optional): Number of best performing structures to save per composition. Defaults to 1.
@@ -155,18 +156,9 @@ class BasinHoppingASE(BasinHoppingBase):
         Returns:
             list: A list of ase.Atoms objects representing the predicted minima
         """
-        if init_structures:
-            atoms = init_structures
-        else:
-            atoms = []
-            for comp in compositions:
-                atoms.append(self.atom_from_comp(comp, density))
-        #atoms = self.atom_from_comp(composition, cell)    
-        #atoms.set_calculator(self.calculator)
-
+        atoms = dict_to_atoms(structures)
         min_atoms = deepcopy(atoms)
         curr_atoms = deepcopy(atoms)
-        #curr_atoms.set_calculator(self.calculator)
         min_energy = [1e10] * len(min_atoms)
         res = []
         
@@ -197,11 +189,11 @@ class BasinHoppingASE(BasinHoppingBase):
                     temp = atom.atoms
                 else:
                     temp = atom
-                res[-1].append({'hop': i, 'init_loss': old_energy, 'loss': optimized_energy, 'perturb': prev_perturb.__name__, 'composition': temp.get_atomic_numbers(), 'structure': self.atoms_to_dict([temp], [optimized_energy])[0]})
+                res[-1].append({'hop': i, 'init_loss': old_energy, 'loss': optimized_energy, 'perturb': prev_perturb.__name__, 'composition': temp.get_atomic_numbers(), 'structure': atoms_to_dict([temp], [optimized_energy])[0]})
                 prev_perturb = self.perturbs[np.random.randint(len(self.perturbs))]
                 prev_perturb(atom, num_atoms_perturb=num_atoms_perturb)
             print('Structure', index, 'Min energy', min_energy[index])
-        min_atoms = self.atoms_to_dict(min_atoms, min_energy)
+        min_atoms = atoms_to_dict(min_atoms, min_energy)
         return res, min_atoms
         
         
@@ -221,12 +213,12 @@ class BasinHoppingBatch(BasinHoppingBase):
         super().__init__("BasinHopping", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, **kwargs)
         self.forcefield = forcefield
     
-    def predict(self, compositions, objective_func, init_structures=None, cell_relax=True, topk=1, batch_size=4, log_per=0, lr=.05, density=.2, num_atoms_perturb=1):
+    def predict(self, structures, objective_func, cell_relax=True, topk=1, batch_size=4, log_per=0, lr=.05, density=.2, num_atoms_perturb=1):
         """
         Optimizes the list of compositions in batches 
 
         Args:
-            compositions (list): A list of compositions, which are lists of atomic numbers
+            atoms (list): A list of dictionaries representing atomic structures
             objective_func (func): An evaluation method to compare structures on some basis
             init_structures (list, optional): Initialized ase atoms structures to use instead of creating randomized structures. Defaults to None
             cell_relax (bool, optional): whether to relax cell or not. Defaults to True.
@@ -239,12 +231,7 @@ class BasinHoppingBatch(BasinHoppingBase):
         Returns:
             list: A list of ase.Atoms objects representing the predicted minima
         """
-        if init_structures:
-            atoms = init_structures
-        else:
-            atoms = []
-            for comp in compositions:
-                atoms.append(self.atom_from_comp(comp, density))
+        atoms = dict_to_atoms(structures)
         min_atoms = deepcopy(atoms)
         min_loss = [1e10] * len(min_atoms)
         best_hop = [0] * len(min_atoms)
@@ -265,7 +252,7 @@ class BasinHoppingBatch(BasinHoppingBase):
                     min_loss[j] = new_loss[j]
                     min_atoms[j] = newAtoms[j].copy()
                     best_hop[j] = i
-                res[j].append({'hop': i, 'init_loss': prev_loss[j][0], 'loss': new_loss[j][0], 'perturb': prev_perturb[j].__name__, 'composition': newAtoms[j].get_atomic_numbers(), 'structure': self.atoms_to_dict([newAtoms[j]], new_loss[j])[0]})
+                res[j].append({'hop': i, 'init_loss': prev_loss[j][0], 'loss': new_loss[j][0], 'perturb': prev_perturb[j].__name__, 'composition': newAtoms[j].get_atomic_numbers(), 'structure': atoms_to_dict([newAtoms[j]], new_loss[j])[0]})
             atoms = deepcopy(min_atoms)
             print('HOP', i, 'took', end_time - start_time, 'seconds')
             for j in range(len(atoms)):
@@ -277,6 +264,6 @@ class BasinHoppingBatch(BasinHoppingBase):
             print('Structure', j, 'min energy', min_loss[j], 'best_hop', best_hop[j])
             avg_loss += min_loss[j]
         print('Avg loss', avg_loss / len(newAtoms))
-        min_atoms = self.atoms_to_dict(min_atoms, min_loss)
+        min_atoms = atoms_to_dict(min_atoms, min_loss)
         return res, min_atoms
 

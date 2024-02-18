@@ -17,6 +17,7 @@ from matdeeplearn.preprocessor.processor import process_data
 from matdeeplearn.trainers.base_trainer import BaseTrainer
 from matdeeplearn.trainers.property_trainer import PropertyTrainer
 from matdeeplearn.common.data import dataset_split
+from msp.structure.structure_util import atoms_to_data, data_to_atoms 
 
 
 class MDL_FF(ForceField):
@@ -221,7 +222,7 @@ class MDL_FF(ForceField):
             res_energy (list): A list of the energies of the optimized structures.
             old_energy (list): A list of the energies of the initial structures.
         """
-        data_list = self.atoms_to_data(atoms)
+        data_list = atoms_to_data(atoms)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")        
         for i in range(len(self.trainer.model)):
             self.trainer.model[i].gradient = False
@@ -269,7 +270,7 @@ class MDL_FF(ForceField):
                 opt.step(lambda: closure(step, temp))
                 # print('optimizer step time', time.time()-start_time)
                 # print('steps taken', step[0] - old_step)
-            res_atoms.extend(self.data_to_atoms(batch))
+            res_atoms.extend(data_to_atoms(batch))
             res_loss.extend(temp[0].cpu().detach().numpy())
             init_loss.extend(temp[1].cpu().detach().numpy())
        
@@ -277,41 +278,6 @@ class MDL_FF(ForceField):
             self.trainer.model[i].gradient = True           
 
         return res_atoms, res_loss, init_loss
-    
-    def atoms_to_data(self, atoms):
-        """
-        Converts a list of ASE atoms objects to a list of torch_geometric.data.Data objects.
-        Args:
-            atoms (list): A list of ASE atoms objects.
-        Returns:
-            list: A list of torch_geometric.data.Data objects.
-        """
-        n_structures = len(atoms)
-        data_list = [Data() for _ in range(n_structures)]
-
-        for i, s in enumerate(atoms):
-            data = atoms[i]
-
-            pos = torch.tensor(data.get_positions(), dtype=torch.float)
-            cell = torch.tensor(np.array([data.cell[:]]), dtype=torch.float)
-            atomic_numbers = torch.LongTensor(data.numbers)
-            structure_id = str(i)
-                    
-            data_list[i].n_atoms = len(atomic_numbers)
-            data_list[i].pos = pos
-            data_list[i].cell = cell   
-            data_list[i].structure_id = [structure_id]  
-            data_list[i].z = atomic_numbers
-            data_list[i].u = torch.Tensor(np.zeros((3))[np.newaxis, ...])
-        return data_list
-
-    def data_to_atoms(self, batch):
-        res = []
-        curr = 0
-        for i in range(len(batch.n_atoms)):
-            res.append(Atoms(batch.z[curr:curr+batch.n_atoms[i]].cpu().numpy(), cell=batch.cell[i].cpu().detach().numpy(), pbc=(True, True, True), positions=batch.pos[curr:curr+batch.n_atoms[i]].cpu().detach().numpy()))
-            curr += batch.n_atoms[i]
-        return res
     
     def from_config_train(self, config, dataset, max_epochs=None, lr=None, batch_size=None):
         """

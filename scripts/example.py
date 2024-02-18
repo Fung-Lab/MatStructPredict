@@ -1,9 +1,9 @@
 from msp.dataset import download_dataset, load_dataset, combine_dataset, update_dataset
 from msp.composition import generate_random_compositions, sample_random_composition
 from msp.forcefield import MDL_FF, MACE_FF, M3GNet_FF
-from msp.structure.globalopt.basin_hopping import BasinHoppingASE, BasinHoppingBatch
+from msp.optimizer.globalopt.basin_hopping import BasinHoppingASE, BasinHoppingBatch
 from msp.utils.objectives import UpperConfidenceBound, Energy
-from msp.utils import atoms_from_dict
+from msp.structure.structure_util import dict_to_atoms, init_structure, atoms_to_dict
 from msp.validate import read_dft_config, setup_DFT, Validate
 import pickle as pkl
 import json
@@ -52,15 +52,17 @@ for i in range(0, max_iterations):
     #compositions are a dictionary of {element:amount}
     #compositions = sample_random_composition(dataset=my_dataset, n=1)
     #or manually specify the list of lists:
-    compositions=[[22, 22, 22, 22, 22, 22, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8] for _ in range(2)]
-    #compositions=[[22, 22, 8, 8, 8, 8]]
+    compositions = [[22, 22, 22, 22, 22, 22, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8] for _ in range(2)]
+    initial_structures = [init_structure(c, pyxtal=False) for c in compositions]
     read_structure = ase.io.read("init.cif")
-    init_structures=[read_structure]
+    # initial_structures=[atoms_to_dict([read_structure], loss=[None])]
+
+
 
     #forcefield itself is not an ase calculator, but can be used to return the MDLCalculator class
     #initialize the predictor class, this is the BasinHopping version which uses an ASE calculator, but we can have another version for batched search
-    total_list, minima_list = predictor.predict(compositions, init_structures=None)
-    minima_list = atoms_from_dict(minima_list)
+    total_list, minima_list = predictor.predict(initial_structures)
+    minima_list = dict_to_atoms(minima_list)
     for j, minima in enumerate(minima_list):
         filename = "iteration_"+str(i)+"_structure_"+str(j)+"_mdl.cif"
         ase.io.write(filename, minima)
@@ -80,22 +82,22 @@ for i in range(0, max_iterations):
     #we do this by first initializing our objective function, which is similar to the loss function class in matdeeplearn
     #objective_func = UpperConfidenceBound(c=0.1)
     objective_func = Energy()
-    total_list_batch, minima_list_batch = predictor_batch.predict(compositions, objective_func, init_structures=None, batch_size=32)
-    minima_list_batch = atoms_from_dict(minima_list_batch)
+    total_list_batch, minima_list_batch = predictor_batch.predict(initial_structures, objective_func, batch_size=32)
+    minima_list_batch = dict_to_atoms(minima_list_batch)
     for j, minima in enumerate(minima_list_batch):
         filename = "iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
         ase.io.write(filename, minima)
         
                   
-    # minima_list_mace = predictor_mace.predict(compositions, init_structures=None)    
-    # minima_list_mace = atoms_from_dict(minima_list_mace)
+    # minima_list_mace = predictor_mace.predict(initial_structures)    
+    # minima_list_mace = dict_to_atoms(minima_list_mace)
     # for j, minima in enumerate(minima_list_mace):
     #     filename = "iteration_"+str(i)+"_structure_"+str(j)+"_mace.cif"
     #     ase.io.write(filename, minima)
        
     
-    # minima_list_m3gnet = predictor_m3gnet.predict(compositions, init_structures=None)   
-    # minima_list_m3gnet = atoms_from_dict(minima_list_m3gnet)
+    # minima_list_m3gnet = predictor_m3gnet.predict(initial_structures)   
+    # minima_list_m3gnet = dict_to_atoms(minima_list_m3gnet)
     # for j, minima in enumerate(minima_list_m3gnet):
     #     filename = "iteration_"+str(i)+"_structure_"+str(j)+"_m3gnet.cif"
     #     ase.io.write(filename, minima)
