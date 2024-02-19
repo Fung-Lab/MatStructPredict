@@ -17,21 +17,21 @@ from pymatgen.io.ase import AseAtomsAdaptor
 from matminer.featurizers.site import CrystalNNFingerprint
 from matminer.featurizers.structure import SiteStatsFingerprint
 
-#download dataset from Materials Project
-#return dataset class or dict
+# download dataset from Materials Project
+# return dataset class or dict
 my_dataset = download_dataset(repo="MP", save=True)
-#or load dataset from disk:
+# or load dataset from disk:
 
-#my_dataset = load_dataset(path ="path/to/dataset")
+# my_dataset = load_dataset(path ="path/to/dataset")
 my_dataset = json.load(open("../data/data_subset_msp.json", "r"))
-#print(my_dataset[0])
-max_iterations=1
+# print(my_dataset[0])
 
+max_iterations=1
 #Initialize a forcefield class, reading in from config (we use MDL_FF but it can be a force field from another library)
 train_config = 'mdl_config.yml'
 forcefield = MDL_FF(train_config, my_dataset)
 
-predictor = BasinHoppingASE(forcefield, hops=5, steps=100, optimizer="FIRE", dr=0.5)
+predictor = BasinHoppingASE(forcefield, hops=5, steps=100, optimizer="FIRE", dr=0.5, perturbs=['pos'])
 
 predictor_batch = BasinHoppingBatch(forcefield, hops=5, steps=100, dr=0.6, optimizer='Adam', batch_size=32)
 
@@ -40,20 +40,20 @@ predictor_batch = BasinHoppingBatch(forcefield, hops=5, steps=100, dr=0.6, optim
 
 # forcefield_m3gnet = M3GNet_FF()
 # predictor_m3gnet = BasinHoppingASE(forcefield_m3gnet, hops=5, steps=100, optimizer="FIRE", dr=0.5)
-#train the forcefield (optional)
-#forcefield.train(my_dataset, .09, .05, .05, max_epochs=1)
-#to load saved model, use update and put the path to file in checkpoint_path in the train_config
-#forcefield.update(my_dataset, .09, .05, .05, max_epochs=1)
+# train the forcefield (optional)
+# forcefield.train(my_dataset, .09, .05, .05, max_epochs=1)
+# to load saved model, use update and put the path to file in checkpoint_path in the train_config
+# forcefield.update(my_dataset, .09, .05, .05, max_epochs=1)
 
 #active learning loop
 for i in range(0, max_iterations):
-    #sample composition using a built in random sampler that checks for repeats in the dataset
-    #returns a list of compositions, could be length 1 or many
-    #compositions are a dictionary of {element:amount}
-    #compositions = sample_random_composition(dataset=my_dataset, n=1)
-    #or manually specify the list of lists:
+    # sample composition using a built in random sampler that checks for repeats in the dataset
+    # returns a list of compositions, could be length 1 or many
+    # compositions are a dictionary of {element:amount}
+    # compositions = sample_random_composition(dataset=my_dataset, n=1)
+    # or manually specify the list of lists:
     compositions = [[22, 22, 22, 22, 22, 22, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8] for _ in range(2)]
-    initial_structures = [init_structure(c, pyxtal=False) for c in compositions]
+    initial_structures = [init_structure(c, pyxtal=True) for c in compositions]
     read_structure = ase.io.read("init.cif")
     # initial_structures=[atoms_to_dict([read_structure], loss=[None])]
 
@@ -78,9 +78,9 @@ for i in range(0, max_iterations):
     f.close()
 
     #---Optimizing a batch of structures with batch basin hopping---
-    #alternatively if we dont use ASE, we can optimize in batch, and optimize over multiple objectives as well
-    #we do this by first initializing our objective function, which is similar to the loss function class in matdeeplearn
-    #objective_func = UpperConfidenceBound(c=0.1)
+    # alternatively if we dont use ASE, we can optimize in batch, and optimize over multiple objectives as well
+    # we do this by first initializing our objective function, which is similar to the loss function class in matdeeplearn
+    # objective_func = UpperConfidenceBound(c=0.1)
     objective_func = Energy()
     total_list_batch, minima_list_batch = predictor_batch.predict(initial_structures, objective_func, batch_size=32)
     minima_list_batch = dict_to_atoms(minima_list_batch)
@@ -89,14 +89,14 @@ for i in range(0, max_iterations):
         ase.io.write(filename, minima)
         
                   
-    # minima_list_mace = predictor_mace.predict(initial_structures)    
+    # total_list_mace, minima_list_mace = predictor_mace.predict(initial_structures)    
     # minima_list_mace = dict_to_atoms(minima_list_mace)
     # for j, minima in enumerate(minima_list_mace):
     #     filename = "iteration_"+str(i)+"_structure_"+str(j)+"_mace.cif"
     #     ase.io.write(filename, minima)
        
     
-    # minima_list_m3gnet = predictor_m3gnet.predict(initial_structures)   
+    # total_list_m3gnet, minima_list_m3gnet = predictor_m3gnet.predict(initial_structures)   
     # minima_list_m3gnet = dict_to_atoms(minima_list_m3gnet)
     # for j, minima in enumerate(minima_list_m3gnet):
     #     filename = "iteration_"+str(i)+"_structure_"+str(j)+"_m3gnet.cif"
@@ -114,9 +114,9 @@ for i in range(0, max_iterations):
     #print(structure_matcher.get_rms_dist(adaptor.get_structure(read_structure), adaptor.get_structure(minima_list_mace[0])))
     #print(structure_matcher.get_rms_dist(adaptor.get_structure(read_structure), adaptor.get_structure(minima_list_m3gnet[0]))) 
        
-    #quantify structure similairy, continous from 1 to 0
-    #see: https://docs.materialsproject.org/methodology/materials-methodology/related-materials
-    #matminer may need older version of numpy==1.23.5
+    # quantify structure similairy, continous from 1 to 0
+    # see: https://docs.materialsproject.org/methodology/materials-methodology/related-materials
+    # matminer may need older version of numpy==1.23.5
     ssf = SiteStatsFingerprint(CrystalNNFingerprint.from_preset('ops', distance_cutoffs=None, x_diff_weight=0), stats=('mean', 'std_dev', 'minimum', 'maximum'))
     target = np.array(ssf.featurize(adaptor.get_structure(read_structure)))
     # mdl = np.array(ssf.featurize(adaptor.get_structure(minima_list[0])))
