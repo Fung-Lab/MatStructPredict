@@ -10,6 +10,8 @@ import copy
 import gc
 import time
 from torch import distributed as dist
+from torch.func import stack_module_state
+from torch.func import functional_call
 from ase import Atoms
 from matdeeplearn.common.registry import registry
 from matdeeplearn.common.ase_utils import MDLCalculator
@@ -46,7 +48,7 @@ class MDL_FF(ForceField):
                     self.train_config['dataset']['test_ratio'],
                 )
         self.trainer = self.from_config_train(self.train_config, self.dataset)
-        #self.model = self.trainer.model
+        
     
         
                     
@@ -87,9 +89,9 @@ class MDL_FF(ForceField):
                 state = {"state_dict": self.trainer.model[i].state_dict()}         
             model_path = os.path.join(sub_path, "best_checkpoint.pt")  
             torch.save(state, model_path)
-        
         gc.collect()
         torch.cuda.empty_cache()
+        
     
 
     def update(self, dataset, train_ratio, val_ratio, test_ratio, max_epochs=None, lr=None, batch_size=None, save_path='saved_model'):
@@ -130,7 +132,6 @@ class MDL_FF(ForceField):
                 state = {"state_dict": self.trainer.model[i].state_dict()}         
             model_path = os.path.join(sub_path, "best_checkpoint.pt")  
             torch.save(state, model_path)
-            
         gc.collect()
         torch.cuda.empty_cache()
             
@@ -189,10 +190,20 @@ class MDL_FF(ForceField):
                         
         out_stack = torch.stack([o["output"] for o in out_list])
         output = {}
-        output["potential_energy"] = torch.mean(out_stack, dim=0)          
-        output["potential_energy_uncertainty"] = torch.std(out_stack, dim=0)          
+        output["potential_energy"] = torch.mean(out_stack, dim=0)
+        output["potential_energy_uncertainty"] = torch.std(out_stack, dim=0)
         #output is a dict        
-        return output                
+        return output
+
+    def _batched_forward(self, batch_data):
+        def fmodel(params, buffers, x):
+            return functional_call(self.base_model, (params, buffers), (x,))['output']
+        out_stack = torch.vmap(fmodel, in_dims=(0, 0, None))(self.params, self.buffers, batch_data)
+        output = {}
+        output["potential_energy"] = torch.mean(out_stack, dim=0)
+        output["potential_energy_uncertainty"] = torch.std(out_stack, dim=0)
+        #output is a dict
+        return output
         
     def create_ase_calc(self):
         """
@@ -226,15 +237,21 @@ class MDL_FF(ForceField):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")        
         for i in range(len(self.trainer.model)):
             self.trainer.model[i].gradient = False
+        self.params, self.buffers = stack_module_state(self.trainer.model)
+        self.base_model = copy.deepcopy(self.trainer.model[0])
+        self.base_model = self.base_model.to('meta')
         # Created a data list
         loader = DataLoader(data_list, batch_size=batch_size)
         loader_iter = iter(loader)
         res_atoms = []
         res_loss = []     
-        init_loss = []                 
+        init_loss = []
+        
         print("device:", device)                       
         for i in range(len(loader_iter)):
             batch = next(loader_iter).to(device)
+            if getattr(objective_func, 'normalize', False):
+                objective_func.set_norm_offset(batch.z, batch.n_atoms)
             pos, cell = batch.pos, batch.cell
 
             opt = getattr(torch.optim, optim, 'Adam')([pos, cell], lr=learning_rate)
@@ -243,14 +260,13 @@ class MDL_FF(ForceField):
             if cell_relax:
                 cell.requires_grad_(True)
 
-            def closure(step, temp):
+            temp = [0, 0]
+            step = [0]
+            def closure(step, temp, batch):
                 opt.zero_grad()
-                output = self._forward(batch.to(device)) 
-                loss = objective_func(output)
-                loss.mean().backward(retain_graph=True)          
-                #energies = self._forward(batch.to(device))["potential_energy"]          
-                #mean_energy = energies.mean()
-                #mean_energy.backward(retain_graph=True)
+                output = self._batched_forward(batch)
+                loss = objective_func(output, batch.n_atoms)
+                loss.mean().backward(retain_graph=True)
                 curr_time = time.time() - start_time
                 if log_per > 0 and step[0] % log_per == 0:                    
                     #print("{}  {0:4d}   {1: 3.6f}".format(output, step[0], loss.mean().item()))      
@@ -261,13 +277,10 @@ class MDL_FF(ForceField):
                 batch.pos, batch.cell = pos, cell
                 temp[0] = loss
                 return loss.mean()
-
-            temp = [0, 0]
-            step = [0]
             for _ in range(steps):
                 start_time = time.time()
                 old_step = step[0]
-                opt.step(lambda: closure(step, temp))
+                opt.step(lambda: closure(step, temp, batch))
                 # print('optimizer step time', time.time()-start_time)
                 # print('steps taken', step[0] - old_step)
             res_atoms.extend(data_to_atoms(batch))
@@ -429,9 +442,9 @@ class MDL_FF(ForceField):
         """
 
         # Load params from checkpoint
+        save_path = save_path.split(',')
         for i in range(len(self.trainer.model)):
-            model_path = os.path.join(save_path, f"checkpoint_{i}", "best_checkpoint.pt")  
-            model_path = save_path  
+            model_path = save_path[i]
             checkpoint = torch.load(model_path, map_location=torch.device(self.trainer.rank))     
             if str(self.trainer.rank) not in ("cpu", "cuda"):
                 self.trainer.model[i].module.load_state_dict(checkpoint["state_dict"])
