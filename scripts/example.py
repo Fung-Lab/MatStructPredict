@@ -33,7 +33,7 @@ forcefield = MDL_FF(train_config, my_dataset)
 
 predictor = BasinHoppingASE(forcefield, hops=5, steps=100, optimizer="FIRE", dr=0.5, perturbs=['pos'])
 
-predictor_batch = BasinHoppingBatch(forcefield, hops=200, steps=100, dr=0.6, optimizer='Adam', batch_size=30)
+predictor_batch = BasinHoppingBatch(forcefield, hops=200, steps=100, dr=0.6, optimizer='Adam', batch_size=30, perturbs=['pos'])
 
 # forcefield_mace = MACE_FF()
 # predictor_mace = BasinHoppingASE(forcefield_mace, hops=5, steps=100, optimizer="FIRE", dr=0.5)
@@ -52,7 +52,7 @@ for i in range(0, max_iterations):
     # compositions are a dictionary of {element:amount}
     # compositions = sample_random_composition(dataset=my_dataset, n=1)
     # or manually specify the list of lists:
-    compositions = [[22, 22, 22, 22, 22, 22, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8] for _ in range(10)]
+    compositions = [[22, 22, 22, 22, 22, 22, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8] for _ in range(6)]
     initial_structures = [init_structure(c, pyxtal=True) for c in compositions]
     read_structure = ase.io.read("init.cif")
     # initial_structures=[atoms_to_dict([read_structure], loss=[None])]

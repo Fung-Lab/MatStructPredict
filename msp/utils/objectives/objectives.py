@@ -1,6 +1,10 @@
 import torch
-from mp_api.client import MPRester
-from ase.data import chemical_symbols
+from pathlib import Path
+import numpy as np
+import time as time
+from torch_scatter import scatter_add
+from mendeleev.fetch import fetch_table
+
 
 class UpperConfidenceBound(torch.nn.Module):
 
@@ -13,27 +17,15 @@ class UpperConfidenceBound(torch.nn.Module):
         
 class Energy(torch.nn.Module):
 
-    def __init__(self, normalize=True):
+    def __init__(self, normalize=True, ljr_ratio=1.0, ljr_power=12, ljr_scale = .8):
         super().__init__()
         """
         Initialize
         """
         self.normalize = normalize
+        self.ljr_power = ljr_power
+        self.lj_rmins = np.load(str(Path(__file__).parent / "lj_rmins.npy")) * ljr_scale
         if normalize:
-            # mpr = MPRester("tRaolKVwFDg3U7aT3xQVoge59TVW4sk2")
-            # element_list = chemical_symbols[1:101]
-            # element_energy={}
-            # energies = [-1]
-            # for element in element_list:
-            #     entries = mpr.get_entries_in_chemsys(elements=[element], additional_criteria={"thermo_types": ["GGA_GGA+U"]})
-            #     lowest_energy=999
-            #     for entry in entries:
-            #         if entry.energy_per_atom < lowest_energy:
-            #             lowest_energy = entry.energy_per_atom
-            #     element_energy[element] = lowest_energy
-            #     energies.append(lowest_energy)
-            # print(element_energy)
-            # print(energies)
             self.element_energy = [-10000, -3.392726045, -0.00905951, -1.9089228666666667, -3.739412865, -6.679391770833334,
                                 -9.2286654925, -8.336494925, -4.947961005, -1.9114789675, -0.02593678, -1.3225252934482759, 
                                 -1.60028005, -3.74557583, -5.42531803, -5.413302506666667, -4.136449866875, -1.84853666, 
@@ -48,23 +40,35 @@ class Energy(torch.nn.Module):
                                 -9.95718903, -11.85777763, -12.95813023, -12.444527185, -11.22736743, -8.83843418, -6.07113332, -3.273882, 
                                 -0.303680365, -2.3626431466666666, -3.71264707, -3.89003431, -10000, -10000, -10000, -10000, -10000, -4.1211750075, 
                                 -7.41385825, -9.51466466, -11.29141001, -12.94777968125, -14.26783833, -10000, -10000, -10000, -10000, -10000, -10000]
+            self.ljr_ratio = ljr_ratio
 
     def set_norm_offset(self, z, n_atoms):
         self.offset = [0]*len(n_atoms)
         curr = 0
+        self.lj_rmins = torch.tensor(self.lj_rmins).to(z.device)
         for i in range(len(n_atoms)):
             temp = z[curr:curr+n_atoms[i]]
             for j in temp:
                 self.offset[i] -= self.element_energy[j]
             curr += n_atoms[i]
+    
+    def lj_repulsion(self, data, power = 12):
+        rmins = self.lj_rmins[(data.z[data.edge_index[0]] - 1), 
+            (data.z[data.edge_index[1]] - 1)]
+        repulsions = torch.where(rmins <= data.edge_weight, 
+            1.0, torch.pow(rmins / data.edge_weight, power))
+        edge_idx_to_graph = data.batch[data.edge_index[0]]
+        lennard_jones_out = scatter_add(repulsions - 1, index=edge_idx_to_graph, dim_size=len(data))        
+        return lennard_jones_out.unsqueeze(1)
 
-    def forward(self, model_output, n_atoms=[]):
+    def forward(self, model_output, batch):
         if self.normalize:
             for i in range(len(model_output['potential_energy'])):
-                model_output['potential_energy'][i] = (model_output['potential_energy'][i] + self.offset[i]) / n_atoms[i]
-            return model_output["potential_energy"]
+                model_output['potential_energy'][i] = (model_output['potential_energy'][i] + self.offset[i]) / batch.n_atoms[i]
+            ljr = self.lj_repulsion(batch, power=self.ljr_power)
+            return model_output["potential_energy"] + self.ljr_ratio * ljr, model_output["potential_energy"]
         else:    
-            return model_output["potential_energy"]
+            return model_output["potential_energy"] + self.ljr_ratio * ljr, model_output["potential_energy"]
     
     def norm_to_raw_loss(self, loss, z):
         offset = 0
@@ -88,13 +92,16 @@ class Uncertainty(torch.nn.Module):
         return model_output["potential_energy_uncertainty"]
 
 class EnergyAndUncertainty(torch.nn.Module):
-    def __init__(self, ratio=.5, normalize=True):
+    def __init__(self, normalize=True, uncertainty_ratio=.5, ljr_ratio=1, ljr_power=12, ljr_scale=.8):
         super().__init__()
         """
         Initialize
         """
-        self.ratio = ratio
+        self.uncertainty_ratio = uncertainty_ratio
+        self.ljr_ratio = ljr_ratio
+        self.ljr_power = ljr_power
         self.normalize = normalize
+        self.lj_rmins = np.load(str(Path(__file__).parent / "lj_rmins.npy")) * ljr_scale
         if normalize:
             self.element_energy = [-1, -3.392726045, -0.00905951, -1.9089228666666667, -3.739412865, -6.679391770833334,
                                 -9.2286654925, -8.336494925, -4.947961005, -1.9114789675, -0.02593678, -1.3225252934482759, 
@@ -120,12 +127,29 @@ class EnergyAndUncertainty(torch.nn.Module):
             for j in temp:
                 self.offset[i] -= self.element_energy[j]
             curr += n_atoms[i]
-        
-
-    def forward(self, model_output, n_atoms=[]):
+    
+    def lj_repulsion(self, data, power = 12):
+        rmins = self.lj_rmins[(data.z[data.edge_index[0]] - 1), 
+            (data.z[data.edge_index[1]] - 1)]
+        repulsions = torch.where(rmins <= data.edge_weight, 
+            1.0, torch.pow(rmins / data.edge_weight, power))
+        edge_idx_to_graph = data.batch[data.edge_index[0]]
+        lennard_jones_out = scatter_add(repulsions - 1, index=edge_idx_to_graph, dim_size=len(data))        
+        return lennard_jones_out.unsqueeze(1)
+    
+    def norm_to_raw_loss(self, loss, z):
+        offset = 0
+        for num in z:
+            offset -= self.element_energy[num]
+        loss *= len(z)
+        loss -= offset
+        return loss
+    
+    def forward(self, model_output, batch):
         if self.normalize:
-            for i in range(len(n_atoms)):
-                model_output['potential_energy'][i] = (model_output['potential_energy'][i] + self.offset[i]) / n_atoms[i]
-            return model_output["potential_energy"] - self.ratio * model_output["potential_energy_uncertainty"]
+            for i in range(len(batch.n_atoms)):
+                model_output['potential_energy'][i] = (model_output['potential_energy'][i] + self.offset[i]) / batch.n_atoms[i]
+            ljr = self.lj_repulsion(batch, power=self.ljr_power)
+            return model_output["potential_energy"] - self.uncertainty_ratio * model_output["potential_energy_uncertainty"] + self.ljr_ratio * ljr, model_output["potential_energy"] - self.uncertainty_ratio * model_output["potential_energy_uncertainty"]
         else:   
-            return model_output["potential_energy"] - self.ratio * model_output["potential_energy_uncertainty"]
+            return model_output["potential_energy"] - self.uncertainty_ratio * model_output["potential_energy_uncertainty"] + self.ljr_ratio * ljr, model_output["potential_energy"] - self.uncertainty_ratio * model_output["potential_energy_uncertainty"]

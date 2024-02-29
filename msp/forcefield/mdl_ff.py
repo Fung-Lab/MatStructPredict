@@ -244,6 +244,8 @@ class MDL_FF(ForceField):
         loader = DataLoader(data_list, batch_size=batch_size)
         loader_iter = iter(loader)
         res_atoms = []
+        ljr_loss = []
+        init_ljr_loss = []
         res_loss = []     
         init_loss = []
         
@@ -260,37 +262,42 @@ class MDL_FF(ForceField):
             if cell_relax:
                 cell.requires_grad_(True)
 
+            temp_ljr = [0, 0]
             temp = [0, 0]
             step = [0]
-            def closure(step, temp, batch):
+            def closure(step, temp_ljr, temp, batch):
                 opt.zero_grad()
                 output = self._batched_forward(batch)
-                loss = objective_func(output, batch.n_atoms)
-                loss.mean().backward(retain_graph=True)
+                ljr_loss, loss = objective_func(output, batch)
+                ljr_loss.mean().backward(retain_graph=True)
                 curr_time = time.time() - start_time
                 if log_per > 0 and step[0] % log_per == 0:                    
                     #print("{}  {0:4d}   {1: 3.6f}".format(output, step[0], loss.mean().item()))      
-                    print(len(batch.structure_id), step[0], loss.mean().item(), curr_time)  
+                    print(len(batch.structure_id), step[0], ljr_loss.mean().item(), curr_time)  
                 if step[0] == 0:
+                    temp_ljr[1] = ljr_loss
                     temp[1] = loss
                 step[0] += 1
                 batch.pos, batch.cell = pos, cell
+                temp_ljr[0] = ljr_loss
                 temp[0] = loss
-                return loss.mean()
+                return ljr_loss.mean()
             for _ in range(steps):
                 start_time = time.time()
                 old_step = step[0]
-                opt.step(lambda: closure(step, temp, batch))
+                opt.step(lambda: closure(step, temp_ljr, temp, batch))
                 # print('optimizer step time', time.time()-start_time)
                 # print('steps taken', step[0] - old_step)
             res_atoms.extend(data_to_atoms(batch))
+            ljr_loss.extend(temp_ljr[0].cpu().detach().numpy())
+            init_ljr_loss.extend(temp_ljr[1].cpu().detach().numpy())
             res_loss.extend(temp[0].cpu().detach().numpy())
             init_loss.extend(temp[1].cpu().detach().numpy())
        
         for i in range(len(self.trainer.model)):
             self.trainer.model[i].gradient = True           
 
-        return res_atoms, res_loss, init_loss
+        return res_atoms, ljr_loss, init_ljr_loss, res_loss, init_loss
     
     def from_config_train(self, config, dataset, max_epochs=None, lr=None, batch_size=None):
         """
