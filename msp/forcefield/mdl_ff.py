@@ -1,3 +1,6 @@
+import sys
+sys.path.append(r"C:\Users\arnbn\Desktop\Useful\gt\fung_lab\MatDeepLearn_dev")
+
 from msp.forcefield.base import ForceField
 
 import torch

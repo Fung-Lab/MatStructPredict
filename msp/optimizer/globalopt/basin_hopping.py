@@ -1,6 +1,7 @@
 from msp.optimizer.optimizer import Optimizer
 from msp.structure.structure_util import atoms_to_dict, dict_to_atoms
 import ase.optimize
+from ase.optimize import FIRE
 from time import time
 import numpy as np
 from copy import deepcopy
@@ -321,3 +322,155 @@ class BasinHoppingBatch(BasinHoppingBase):
         min_atoms = atoms_to_dict(min_atoms, min_loss)
         return res, min_atoms, best_hop
 
+class BasinHoppingSurface(BasinHoppingBase):
+    def __init__(self, calculator, hops=5, steps=100, optimizer="FIRE", dr=0.5, max_atom_num=101, **kwargs):
+        super().__init__("BasinHoppingSurface", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, **kwargs)
+        self.calculator=calculator
+        self.virtual_sites=[]
+
+    def get_surface_atoms_indices(self, atoms):
+        positions = [atom.position for atom in atoms]
+        x_min, x_max = min(position[0] for position in positions), max(position[0] for position in positions)
+        y_min, y_max = min(position[1] for position in positions), max(position[1] for position in positions)
+        z_min, z_max = min(position[2] for position in positions), max(position[2] for position in positions)
+        threshold = 1.0   # set a cutoff where all atoms greater than cutoff are considered surface
+        surface_atoms_indices = [index for index, atom in enumerate(atoms)
+                                if (x_max - atom.position[0] <= threshold) or (atom.position[0] - x_min <= threshold) or
+                                    (y_max - atom.position[1] <= threshold) or (atom.position[1] - y_min <= threshold) or
+                                    (z_max - atom.position[2] <= threshold) or (atom.position[2] - z_min <= threshold)]
+        return surface_atoms_indices
+    
+    def perturb_surface(self, atoms):
+        print("perturbing surface")
+        surface_indices = self.get_surface_atoms_indices(atoms)
+        if len(surface_indices) == 0:
+            return  # No surface atoms to perturb
+        move_type = np.random.choice(["add", "replace", "remove"])
+        if move_type == "add":
+            print("attempting to add ")
+            #assert(False)
+            #self.addAtomScan(atoms)
+            self.add_atom_to_virtual_site(atoms)
+            #self.addAtom(atoms)
+        elif move_type == "replace":
+            print("attempting to replcae")
+            self.replaceAtom(atoms, surface_indices)
+        elif move_type == "remove":
+            print("attempting to remove")
+            self.removeAtom(atoms)
+
+    def remove_surface_layers(self, atoms, n_layers): # for virtual adsorption sites
+        z_coords = atoms.positions[:, 2] 
+        unique_z = np.unique(z_coords)
+        
+        if len(unique_z) < n_layers:
+            raise ValueError("Not enough layers in the structure to remove")
+
+        cutoff_z = sorted(unique_z)[n_layers - 1]
+        self.virtual_sites = [atom.position for atom in atoms if atom.position[2] >= cutoff_z]
+        del_atoms_indices = [i for i, atom in enumerate(atoms) if atom.position[2] >= cutoff_z]
+        del atoms[del_atoms_indices]
+
+    def add_atom_to_virtual_site(self, atoms):
+        if not self.virtual_sites:
+            raise ValueError("No virtual sites available for adding an atom.")
+        unique_atomic_numbers = np.unique(atoms.get_atomic_numbers())
+        new_atom_atomic_number = np.random.choice(unique_atomic_numbers)
+        site_index = np.random.randint(len(self.virtual_sites))
+        new_atom_position = self.virtual_sites[site_index]
+        atoms += Atom(new_atom_atomic_number, position=new_atom_position)
+
+    def addAtomScan(self, atoms):
+        x_range = (min(atom.position[0] for atom in atoms), max(atom.position[0] for atom in atoms))
+        y_range = (min(atom.position[1] for atom in atoms), max(atom.position[1] for atom in atoms))
+        z_max = max(atom.position[2] for atom in atoms)
+        x_pos = np.random.uniform(*x_range)
+        y_pos = np.random.uniform(*y_range)
+
+        surface_indices = self.get_surface_atoms_indices(atoms)
+        surface_atoms = [atoms[i] for i in surface_indices]
+
+        threshold = 1.0
+        z_pos = z_max + threshold
+
+        found_position = False
+        while z_pos > 0 and not found_position:  # Ensure z_pos is always above 0
+            for atom in surface_atoms:
+                distance = np.linalg.norm(np.array([x_pos, y_pos, z_pos]) - atom.position)
+                if distance < threshold:  # Threshold for being "close"
+                    found_position = True
+                    break
+            if not found_position:
+                z_pos -= 0.1
+        unique_atomic_numbers = np.unique(atoms.get_atomic_numbers())
+        new_atom_type = np.random.choice(unique_atomic_numbers)
+        new_atom = Atom(new_atom_type, position=(x_pos, y_pos, z_pos))
+        print("adding atom ", new_atom)
+        atoms.append(new_atom)
+
+    def addAtom(self, atoms):
+        surface_indices = self.get_surface_atoms_indices(atoms)
+        #assert(False)
+        new_atom = Atom(np.random.randint(1, self.max_atom_num), position=(0, 0, 0))
+        print("added atom ", new_atom)
+        atoms.append(new_atom)
+        pos = atoms.get_scaled_positions()
+        pos[-1] = np.random.uniform(0., 1., (1, 3))
+        atoms.set_scaled_positions(pos)
+
+    def removeAtom(self, atoms):
+        surface_indices = self.get_surface_atoms_indices(atoms)
+        if len(surface_indices) > 0:
+            atom_to_remove = np.random.choice(surface_indices)
+            #print("removed1 ", atoms[atom_to_remove])
+            del atoms[atom_to_remove]
+
+    def replaceAtom(self, atoms, surface_indices):
+        if len(surface_indices) > 0:
+            unique_atomic_numbers = np.unique(atoms.get_atomic_numbers())
+            index_to_replace = np.random.choice(surface_indices)
+            old_atomic_number = atoms[index_to_replace].number
+            possible_replacements = unique_atomic_numbers[unique_atomic_numbers != old_atomic_number]
+            if len(possible_replacements) > 0:
+                new_atomic_number = np.random.choice(possible_replacements)
+            else:
+                new_atomic_number = old_atomic_number
+            
+            new_atom = Atom(new_atomic_number, position=atoms[index_to_replace].position)
+            print("replaced with ", new_atomic_number," : ", new_atom)
+            del atoms[index_to_replace]
+            atoms.append(new_atom)
+            #atoms[index_to_replace] = new_atom
+            # only replace with atoms already in teh set
+            # atoms.getatomicnumbers and pick from that list
+    
+    def predict(self, atoms):
+    #def predict(self, composition, cell=np.array([[5, 0, 0], [0, 5, 0], [0, 0, 5]]), topk=1, max_atom_num=101, num_atoms_perturb=1):
+        
+        
+        min_atoms = atoms.copy()
+        min_atoms.set_calculator(self.calculator)
+
+        print("min atoms calculator: ", min_atoms.get_calculator())
+        curr_atoms = atoms.copy()
+        curr_atoms.set_calculator(self.calculator)
+        
+        self.remove_surface_layers(curr_atoms, 2)
+
+        min_energy = curr_atoms.get_potential_energy()
+        print("minenergy is ", min_energy)
+        print("self.hops is ", self.hops)
+        # curr_atoms is not a pointer to atoms - fix
+        # should be perturbing curr_atoms
+        for i in range(self.hops):
+            old_energy = curr_atoms.get_potential_energy()
+            optimizer = FIRE(curr_atoms, logfile=None)
+            optimizer.run(fmax=0.001, steps=self.steps)
+            optimized_energy = curr_atoms.get_potential_energy()
+
+            if optimized_energy < min_energy:
+                min_atoms = curr_atoms.copy()
+                min_energy = optimized_energy
+            #self.perturbs[np.random.randint(len(self.perturbs))](curr_atoms)
+            self.perturb_surface(curr_atoms)
+        return min_atoms

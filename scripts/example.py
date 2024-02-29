@@ -1,3 +1,6 @@
+import sys
+sys.path.append(".")
+
 from msp.dataset import download_dataset, load_dataset, combine_dataset, update_dataset
 from msp.composition import generate_random_compositions, sample_random_composition
 from msp.forcefield import MDL_FF, MACE_FF, M3GNet_FF

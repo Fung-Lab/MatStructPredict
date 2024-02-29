@@ -1,6 +1,10 @@
-from msp.forcefield.base import ForceField
-from ase import Atoms
+import sys
+sys.path.append(r"C:\Users\arnbn\Desktop\Useful\gt\fung_lab\MatDeepLearn_dev")
+import torch
 
+from msp.forcefield.base import ForceField
+from mace.calculators import mace_mp
+from ase import Atoms
 
 class MACE_FF(ForceField):
 
@@ -44,6 +48,9 @@ class MACE_FF(ForceField):
         """
         Returns ase calculator
         """
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        calculator = mace_mp(model="large", dispersion=False, default_dtype="float32", device=device)        
+        return calculator
         calculator = self.mace_mp(model="large", dispersion=False, default_dtype="float32", device='cuda')        
         return calculator
     
