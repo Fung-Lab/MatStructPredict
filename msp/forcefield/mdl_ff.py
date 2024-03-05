@@ -272,8 +272,13 @@ class MDL_FF(ForceField):
                 ljr_loss.mean().backward(retain_graph=True)
                 curr_time = time.time() - start_time
                 if log_per > 0 and step[0] % log_per == 0:                    
-                    #print("{}  {0:4d}   {1: 3.6f}".format(output, step[0], loss.mean().item()))      
-                    print(len(batch.structure_id), step[0], ljr_loss.mean().item(), curr_time)  
+                    #print("{}  {0:4d}   {1: 3.6f}".format(output, step[0], loss.mean().item()))  
+                    if cell_relax:    
+                        print("Structure ID: {}, Step: {}, LJR Loss: {:.6f}, Pos Gradient: {:.6f}, Cell Gradient: {:.6f}, Time: {:.6f}".format(len(batch.structure_id), 
+                        step[0], ljr_loss.mean().item(), pos.grad.abs().mean().item(), cell.grad.abs().mean().item(), curr_time))  
+                    else:
+                        print("Structure ID: {}, Step: {}, LJR Loss: {:.6f}, Pos Gradient: {:.6f}, Time: {:.6f}".format(len(batch.structure_id), 
+                        step[0], ljr_loss.mean().item(), pos.grad.abs().mean().item(), curr_time))
                 if step[0] == 0:
                     temp_ljr[1] = ljr_loss
                     temp[1] = loss

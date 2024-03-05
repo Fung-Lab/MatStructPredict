@@ -17,7 +17,7 @@ class UpperConfidenceBound(torch.nn.Module):
         
 class Energy(torch.nn.Module):
 
-    def __init__(self, normalize=True, ljr_ratio=1.0, ljr_power=12, ljr_scale = .8):
+    def __init__(self, normalize=True, energy_ratio=1.0, ljr_ratio=1.0, ljr_power=12, ljr_scale = .8):
         super().__init__()
         """
         Initialize
@@ -25,6 +25,9 @@ class Energy(torch.nn.Module):
         self.normalize = normalize
         self.ljr_power = ljr_power
         self.lj_rmins = np.load(str(Path(__file__).parent / "lj_rmins.npy")) * ljr_scale
+        self.ljr_ratio = ljr_ratio
+        self.energy_ratio = energy_ratio
+
         if normalize:
             self.element_energy = [-10000, -3.392726045, -0.00905951, -1.9089228666666667, -3.739412865, -6.679391770833334,
                                 -9.2286654925, -8.336494925, -4.947961005, -1.9114789675, -0.02593678, -1.3225252934482759, 
@@ -40,7 +43,6 @@ class Energy(torch.nn.Module):
                                 -9.95718903, -11.85777763, -12.95813023, -12.444527185, -11.22736743, -8.83843418, -6.07113332, -3.273882, 
                                 -0.303680365, -2.3626431466666666, -3.71264707, -3.89003431, -10000, -10000, -10000, -10000, -10000, -4.1211750075, 
                                 -7.41385825, -9.51466466, -11.29141001, -12.94777968125, -14.26783833, -10000, -10000, -10000, -10000, -10000, -10000]
-            self.ljr_ratio = ljr_ratio
 
     def set_norm_offset(self, z, n_atoms):
         self.offset = [0]*len(n_atoms)
@@ -66,9 +68,9 @@ class Energy(torch.nn.Module):
             for i in range(len(model_output['potential_energy'])):
                 model_output['potential_energy'][i] = (model_output['potential_energy'][i] + self.offset[i]) / batch.n_atoms[i]
             ljr = self.lj_repulsion(batch, power=self.ljr_power)
-            return model_output["potential_energy"] + self.ljr_ratio * ljr, model_output["potential_energy"]
+            return self.energy_ratio * model_output["potential_energy"] + self.ljr_ratio * ljr, self.energy_ratio * model_output["potential_energy"]
         else:    
-            return model_output["potential_energy"] + self.ljr_ratio * ljr, model_output["potential_energy"]
+            return self.energy_ratio * model_output["potential_energy"] + self.ljr_ratio * ljr, self.energy_ratio * model_output["potential_energy"]
     
     def norm_to_raw_loss(self, loss, z):
         offset = 0
@@ -92,7 +94,7 @@ class Uncertainty(torch.nn.Module):
         return model_output["potential_energy_uncertainty"]
 
 class EnergyAndUncertainty(torch.nn.Module):
-    def __init__(self, normalize=True, uncertainty_ratio=.5, ljr_ratio=1, ljr_power=12, ljr_scale=.8):
+    def __init__(self, normalize=True, energy_ratio=1.0, uncertainty_ratio=.5, ljr_ratio=1, ljr_power=12, ljr_scale=.8):
         super().__init__()
         """
         Initialize
@@ -101,6 +103,7 @@ class EnergyAndUncertainty(torch.nn.Module):
         self.ljr_ratio = ljr_ratio
         self.ljr_power = ljr_power
         self.normalize = normalize
+        self.energy_ratio = energy_ratio
         self.lj_rmins = np.load(str(Path(__file__).parent / "lj_rmins.npy")) * ljr_scale
         if normalize:
             self.element_energy = [-1, -3.392726045, -0.00905951, -1.9089228666666667, -3.739412865, -6.679391770833334,
@@ -151,6 +154,6 @@ class EnergyAndUncertainty(torch.nn.Module):
             for i in range(len(batch.n_atoms)):
                 model_output['potential_energy'][i] = (model_output['potential_energy'][i] + self.offset[i]) / batch.n_atoms[i]
             ljr = self.lj_repulsion(batch, power=self.ljr_power)
-            return model_output["potential_energy"] - self.uncertainty_ratio * model_output["potential_energy_uncertainty"] + self.ljr_ratio * ljr, model_output["potential_energy"] - self.uncertainty_ratio * model_output["potential_energy_uncertainty"]
+            return self.energy_ratio * model_output["potential_energy"] - self.uncertainty_ratio * model_output["potential_energy_uncertainty"] + self.ljr_ratio * ljr, self.energy_ratio * model_output["potential_energy"] - self.uncertainty_ratio * model_output["potential_energy_uncertainty"]
         else:   
-            return model_output["potential_energy"] - self.uncertainty_ratio * model_output["potential_energy_uncertainty"] + self.ljr_ratio * ljr, model_output["potential_energy"] - self.uncertainty_ratio * model_output["potential_energy_uncertainty"]
+            return self.energy_ratio * model_output["potential_energy"] - self.uncertainty_ratio * model_output["potential_energy_uncertainty"] + self.ljr_ratio * ljr, self.energy_ratio * model_output["potential_energy"] - self.uncertainty_ratio * model_output["potential_energy_uncertainty"]

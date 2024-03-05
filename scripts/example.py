@@ -52,8 +52,8 @@ for i in range(0, max_iterations):
     # compositions are a dictionary of {element:amount}
     # compositions = sample_random_composition(dataset=my_dataset, n=1)
     # or manually specify the list of lists:
-    compositions = [[22, 22, 22, 22, 22, 22, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8] for _ in range(9)]
-    initial_structures = [init_structure(c, pyxtal=True) for c in compositions]
+    compositions = [[22, 22, 22, 22, 22, 22, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8] for _ in range(7)]
+    initial_structures = [init_structure(c, pyxtal=False) for c in compositions]
     read_structure = ase.io.read("init.cif")
     # initial_structures=[atoms_to_dict([read_structure], loss=[None])]
 
@@ -81,8 +81,9 @@ for i in range(0, max_iterations):
     # alternatively if we dont use ASE, we can optimize in batch, and optimize over multiple objectives as well
     # we do this by first initializing our objective function, which is similar to the loss function class in matdeeplearn
     # objective_func = UpperConfidenceBound(c=0.1)
-    objective_func = EnergyAndUncertainty(normalize=True, uncertainty_ratio=.5, ljr_ratio=100)
-    total_list_batch, minima_list_batch, best_hop = predictor_batch.predict(initial_structures, objective_func, batch_size=32)
+    #objective_func = EnergyAndUncertainty(normalize=True, uncertainty_ratio=.5, ljr_ratio=100)
+    objective_func = Energy(normalize=True, energy_ratio=1, ljr_ratio=1, ljr_scale=.7)
+    total_list_batch, minima_list_batch, best_hop = predictor_batch.predict(initial_structures, objective_func, batch_size=32, log_per=5, lr=.05)
     minima_list_batch = dict_to_atoms(minima_list_batch)
     for j, minima in enumerate(minima_list_batch):
         filename = "iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
