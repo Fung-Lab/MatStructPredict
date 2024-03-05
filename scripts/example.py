@@ -33,7 +33,7 @@ forcefield = MDL_FF(train_config, my_dataset)
 
 predictor = BasinHoppingASE(forcefield, hops=5, steps=100, optimizer="FIRE", dr=0.5, perturbs=['pos'])
 
-predictor_batch = BasinHoppingBatch(forcefield, hops=200, steps=100, dr=0.6, optimizer='Adam', batch_size=30, perturbs=['pos'])
+predictor_batch = BasinHoppingBatch(forcefield, hops=100, steps=100, dr=0.6, optimizer='Adam', batch_size=30)
 
 # forcefield_mace = MACE_FF()
 # predictor_mace = BasinHoppingASE(forcefield_mace, hops=5, steps=100, optimizer="FIRE", dr=0.5)
@@ -52,7 +52,7 @@ for i in range(0, max_iterations):
     # compositions are a dictionary of {element:amount}
     # compositions = sample_random_composition(dataset=my_dataset, n=1)
     # or manually specify the list of lists:
-    compositions = [[22, 22, 22, 22, 22, 22, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8] for _ in range(6)]
+    compositions = [[22, 22, 22, 22, 22, 22, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8] for _ in range(9)]
     initial_structures = [init_structure(c, pyxtal=True) for c in compositions]
     read_structure = ase.io.read("init.cif")
     # initial_structures=[atoms_to_dict([read_structure], loss=[None])]
@@ -81,7 +81,7 @@ for i in range(0, max_iterations):
     # alternatively if we dont use ASE, we can optimize in batch, and optimize over multiple objectives as well
     # we do this by first initializing our objective function, which is similar to the loss function class in matdeeplearn
     # objective_func = UpperConfidenceBound(c=0.1)
-    objective_func = Energy(normalize=True)
+    objective_func = EnergyAndUncertainty(normalize=True, uncertainty_ratio=.5, ljr_ratio=100)
     total_list_batch, minima_list_batch, best_hop = predictor_batch.predict(initial_structures, objective_func, batch_size=32)
     minima_list_batch = dict_to_atoms(minima_list_batch)
     for j, minima in enumerate(minima_list_batch):
@@ -93,8 +93,8 @@ for i in range(0, max_iterations):
         f.write('\tbest_hop: ' + str(best_hop[j]) + '\n')
         for hop in total_list_batch[i]:
             f.write("\tHop: " +str(hop['hop'])+ '\n')
-            f.write("\t\tInit loss: " +str(hop['init_loss'])+ '\n')
-            f.write("\t\tFinal loss: " +str(hop['loss'])+ '\n')
+            f.write("\t\tInit LJR loss: " +str(hop['init_ljr_loss'])+ '\n')
+            f.write("\t\tFinal LJR loss: " +str(hop['ljr_loss'])+ '\n')
             if getattr(objective_func, 'normalize', False):
                 f.write("\t\tRaw loss: " +str(hop['raw_loss'])+ '\n')
             f.write("\t\tComposition: " +str(hop['composition'])+ '\n')

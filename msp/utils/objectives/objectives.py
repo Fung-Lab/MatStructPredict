@@ -122,6 +122,7 @@ class EnergyAndUncertainty(torch.nn.Module):
     def set_norm_offset(self, z, n_atoms):
         self.offset = [0]*len(n_atoms)
         curr = 0
+        self.lj_rmins = torch.tensor(self.lj_rmins).to(z.device)
         for i in range(len(n_atoms)):
             temp = z[curr:curr+n_atoms[i]]
             for j in temp:

@@ -28,7 +28,7 @@ task:
   use_amp: True  
 
 model:
-  name: torchmd_etEarly
+  name: torchmd_et
   # model attributes
   hidden_channels: 128
   num_layers: 8
