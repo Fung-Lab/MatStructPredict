@@ -10,6 +10,7 @@ import copy
 import gc
 import time
 from torch import distributed as dist
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from ase import Atoms
 from matdeeplearn.common.registry import registry
 from matdeeplearn.common.ase_utils import MDLCalculator
@@ -238,6 +239,7 @@ class MDL_FF(ForceField):
             pos, cell = batch.pos, batch.cell
 
             opt = getattr(torch.optim, optim, 'Adam')([pos, cell], lr=learning_rate)
+            lr_scheduler = ReduceLROnPlateau(opt, 'min', factor=0.8, patience=10)
 
             pos.requires_grad_(True)
             if cell_relax:
@@ -267,9 +269,11 @@ class MDL_FF(ForceField):
             for _ in range(steps):
                 start_time = time.time()
                 old_step = step[0]
-                opt.step(lambda: closure(step, temp))
+                loss = opt.step(lambda: closure(step, temp))
+                lr_scheduler.step(loss)
                 # print('optimizer step time', time.time()-start_time)
                 # print('steps taken', step[0] - old_step)
+            #print("learning rate: ", opt.param_groups[0]['lr'])
             res_atoms.extend(data_to_atoms(batch))
             res_loss.extend(temp[0].cpu().detach().numpy())
             init_loss.extend(temp[1].cpu().detach().numpy())

@@ -12,8 +12,7 @@ import torch
 
 
 class BasinHoppingBase(Optimizer):
-    def __init__(self, name, hops=5, steps=100, optimizer="FIRE", dr=.5, max_atom_num=100, 
-                perturbs=['pos', 'cell', 'atomic_num', 'add', 'remove', 'swap'], **kwargs):
+    def __init__(self, name, hops=5, steps=100, optimizer="FIRE", dr=.5, max_atom_num=100, **kwargs):
         """
         Initialize the basin hopping optimizer.
 
@@ -22,19 +21,22 @@ class BasinHoppingBase(Optimizer):
             hops (int, optional): Number of basin hops. Defaults to 5.
             steps (int, optional): Number of steps per basin hop. Defaults to 100.
             optimizer (str, optional): Optimizer to use for each step. Defaults to "FIRE".
-            dr (int, optional): rate at which to change values.
-            max_atom_num (int, optional): maximum atom number to be considered.
-            perturbs (list): list of perturbs to use. Defaults to all possible (pos, cell, atomic_num, add, remove, swap).
+            dr (int, optional): rate at which to change values
+            max_atom_num (int, optional): maximum atom number to be considered
         """
         super().__init__(name, hops=hops, steps=steps, optimizer=optimizer, dr=dr, **kwargs)
         self.steps = steps
         self.hops = hops
         self.dr = dr
         self.max_atom_num = max_atom_num
+        self.perturbs = []
+        self.perturbs.append(self.perturbPos)
         self.optimizer = optimizer
-        perturbs_dict = {'pos': self.perturbPos, 'cell': self.perturbCell, 'atomic_num': self.perturbAtomicNum, 
-                        'add': self.addAtom, 'remove': self.removeAtom, 'swap': self.swapAtom}
-        self.perturbs = [perturbs_dict[perturb] for perturb in perturbs]
+        self.perturbs.append(self.perturbCell)
+        self.perturbs.append(self.perturbAtomicNum)
+        self.perturbs.append(self.addAtom)
+        self.perturbs.append(self.removeAtom)
+        self.perturbs.append(self.swapAtom)
     
     def perturbPos(self, atoms, **kwargs):
         """
@@ -124,8 +126,7 @@ class BasinHoppingBase(Optimizer):
 
 class BasinHoppingASE(BasinHoppingBase):
 
-    def __init__(self, forcefield, hops=5, steps=100, optimizer="FIRE", dr=.5, max_atom_num=100, 
-                perturbs=['pos', 'cell', 'atomic_num', 'add', 'remove', 'swap'], **kwargs):
+    def __init__(self, forcefield, hops=5, steps=100, optimizer="FIRE", dr=.5, max_atom_num=100, **kwargs):
         """
         Initialize the basinhoppingASE optimizer, which uses an ASE calculator to optimize structures one at a time.
 
@@ -136,10 +137,9 @@ class BasinHoppingASE(BasinHoppingBase):
             optimizer (str, optional): Optimizer to use for each step. Defaults to "FIRE".
             dr (int, optional): rate at which to change values. Defaults to .5.
             max_atom_num (int, optional): maximum atom number to be considered, exclusive. Defaults to 101.
-            perturbs (list): list of perturbs to use. Defaults to all possible (pos, cell, atomic_num, add, remove, swap).
         """
 
-        super().__init__("BasinHoppingASE", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, perturbs=perturbs, **kwargs)
+        super().__init__("BasinHoppingASE", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, **kwargs)
         self.calculator = forcefield.create_ase_calc()
 
     def predict(self, structures, cell_relax=True, topk=1, num_atoms_perturb=1, density=.2):
@@ -198,8 +198,7 @@ class BasinHoppingASE(BasinHoppingBase):
         
         
 class BasinHoppingBatch(BasinHoppingBase):
-    def __init__(self, forcefield, hops=5, steps=100, optimizer="Adam", dr=.5, max_atom_num=100,
-                perturbs=['pos', 'cell', 'atomic_num', 'add', 'remove', 'swap'], **kwargs):
+    def __init__(self, forcefield, hops=5, steps=100, optimizer="Adam", dr=.5, max_atom_num=100, **kwargs):
         """
         Initialize the basinhopping optimizer, which uses a forcefield to optimize batches
 
@@ -210,9 +209,8 @@ class BasinHoppingBatch(BasinHoppingBase):
             optimizer (str, optional): Optimizer to use for each step. Defaults to "Adam".
             dr (int, optional): rate at which to change values. Defaults to .5.
             max_atom_num (int, optional): maximum atom number to be considered, exclusive. Defaults to 101.
-            perturbs (list): list of perturbs to use. Defaults to all possible (pos, cell, atomic_num, add, remove, swap).
         """
-        super().__init__("BasinHopping", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, perturbs=perturbs, **kwargs)
+        super().__init__("BasinHopping", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, **kwargs)
         self.forcefield = forcefield
     
     def predict(self, structures, objective_func, cell_relax=True, topk=1, batch_size=4, log_per=0, lr=.05, density=.2, num_atoms_perturb=1):
