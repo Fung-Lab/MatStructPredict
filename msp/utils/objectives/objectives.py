@@ -159,7 +159,7 @@ class EnergyAndUncertainty(torch.nn.Module):
 
 
 class EmbeddingDistance(torch.nn.Module):
-    def __init__(self, embeddings, normalize=True, energy_ratio=1.0, ljr_ratio=1, ljr_power=12, ljr_scale=.8, embedding_ratio=.1):
+    def __init__(self, embeddings, normalize=True, energy_ratio=1.0, ljr_ratio=1, ljr_power=12, ljr_scale=.8, embedding_ratio=.1, mode="min"):
         super().__init__()
         """
         Initialize
@@ -171,6 +171,7 @@ class EmbeddingDistance(torch.nn.Module):
         self.energy_ratio = energy_ratio
         self.lj_rmins = np.load(str(Path(__file__).parent / "lj_rmins.npy")) * ljr_scale
         self.embeddings = embeddings
+        self.mode = mode
 
         if normalize:
             self.element_energy = [-1, -3.392726045, -0.00905951, -1.9089228666666667, -3.739412865, -6.679391770833334,
@@ -222,6 +223,10 @@ class EmbeddingDistance(torch.nn.Module):
                 model_output['potential_energy'][i] = (model_output['potential_energy'][i] + self.offset[i]) / batch.n_atoms[i]
         ljr = self.lj_repulsion(batch, power=self.ljr_power)
         embedding_loss = torch.cdist(model_output['embeddings'], self.embeddings, p=2)
-        embedding_loss = torch.mean(embedding_loss, dim=0)
-        embedding_loss = torch.mean(embedding_loss, dim=-1, keepdim=True)
+        if self.mode == 'min':
+            embedding_loss = torch.min(embedding_loss, dim=-1, keepdim=True)[0]
+            embedding_loss = torch.mean(embedding_loss, dim=0)
+        else:
+            embedding_loss = torch.mean(embedding_loss, dim=0)
+            embedding_loss = torch.mean(embedding_loss, dim=-1, keepdim=True)
         return self.energy_ratio * model_output["potential_energy"] - self.embedding_ratio * embedding_loss + self.ljr_ratio * ljr, model_output["potential_energy"], -embedding_loss, ljr
