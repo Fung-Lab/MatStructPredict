@@ -274,7 +274,7 @@ class BasinHoppingBatch(BasinHoppingBase):
         """
         new_atoms = dict_to_atoms(structures)
         min_atoms = deepcopy(new_atoms)
-        min_ljr_loss = [1e10] * len(min_atoms)
+        min_objective_loss = [1e10] * len(min_atoms)
         best_hop = [0] * len(min_atoms)
         prev_perturb = [self.perturbPos] * len(min_atoms)
         res = []
@@ -282,33 +282,29 @@ class BasinHoppingBatch(BasinHoppingBase):
             res.append([])
         for i in range(self.hops):
             start_time = time()
-            new_atoms, new_ljr_loss, init_ljr_loss, new_loss, init_loss = self.forcefield.optimize(new_atoms, self.steps, objective_func, log_per, lr, batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer)
+            new_atoms, obj_loss, energy_loss, novel_loss, soft_sphere_loss = self.forcefield.optimize(new_atoms, self.steps, objective_func, log_per, lr, batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer)
             end_time = time()
             for j in range(len(new_atoms)):
-                # print('\tStructure', j)
-                # print('\t\tHOP', i, 'previous energy', prev_loss[j])
-                # print('\t\tHOP', i, 'optimized energy', new_loss[j])
-                # print('\t\tHOP', i, 'raw energy', objective_func.norm_to_raw_loss(new_loss[j][0], new_atoms[j].get_atomic_numbers())) 
-                if new_ljr_loss[j] < min_ljr_loss[j]:
-                    min_ljr_loss[j] = new_ljr_loss[j]
+                if obj_loss[j] < min_objective_loss[j]:
+                    min_objective_loss[j] = obj_loss[j]
                     min_atoms[j] = new_atoms[j].copy()
                     best_hop[j] = i
                 if getattr(objective_func, 'normalize', False):
-                    res[j].append({'hop': i, 'init_loss': init_loss[j][0], 'loss': new_loss[j][0], 'init_ljr_loss': init_ljr_loss[j][0], 'ljr_loss': new_ljr_loss[j][0],
-                                'raw_loss' : objective_func.norm_to_raw_loss(new_loss[j][0], new_atoms[j].get_atomic_numbers()),
+                    res[j].append({'hop': i, 'objective_loss': obj_loss[j][0], 'energy_loss': energy_loss[j][0], 'novel_loss': novel_loss[j][0], 'soft_sphere_loss': soft_sphere_loss[j][0],
+                                'unnormalized_loss' : objective_func.norm_to_raw_loss(energy_loss[j][0], new_atoms[j].get_atomic_numbers()),
                                'perturb': prev_perturb[j].__name__, 'composition': new_atoms[j].get_atomic_numbers(), 
-                               'structure': atoms_to_dict([new_atoms[j]], new_loss[j])[0]})
+                               'structure': atoms_to_dict([new_atoms[j]], obj_loss[j])[0]})
                 else:
-                    res[j].append({'hop': i, 'init_loss': init_loss[j][0], 'loss': new_loss[j][0], 'init_ljr_loss': init_ljr_loss[j][0], 'ljr_loss': new_ljr_loss[j][0],
+                    res[j].append({'hop': i, 'objective_loss': obj_loss[j][0], 'energy_loss': energy_loss[j][0], 'novel_loss': novel_loss[j][0], 'soft_sphere_loss': soft_sphere_loss[j][0],
                                'perturb': prev_perturb[j].__name__, 'composition': new_atoms[j].get_atomic_numbers(), 
-                               'structure': atoms_to_dict([new_atoms[j]], new_loss[j])[0]})
+                               'structure': atoms_to_dict([new_atoms[j]], obj_loss[j])[0]})
                 print("\tStructure: ", j)
-                print("\t\tInit LJR loss: ", res[j][-1]['init_ljr_loss'])
-                print("\t\tFinal LJR loss: ", res[j][-1]['ljr_loss'])
-                print("\t\tInit loss: ", res[j][-1]['init_loss'])
-                print("\t\tFinal loss: ", res[j][-1]['loss'])
+                print("\t\tObjective loss: ", res[j][-1]['objective_loss'])
+                print("\t\tEnergy loss: ", res[j][-1]['energy_loss'])
                 if getattr(objective_func, 'normalize', False):
-                    print("\t\tRaw loss: ", res[j][-1]['raw_loss'])
+                    print("\t\tUnnormalized energy loss: ", res[j][-1]['unnormalized_loss'])
+                print("\t\tNovel loss: ", res[j][-1]['novel_loss'])
+                print("\t\tSoft sphere loss: ", res[j][-1]['soft_sphere_loss'])
                 print("\t\tComposition: ", res[j][-1]['composition'])
                 print("\t\tperturb: ", res[j][-1]['perturb'])
             print('HOP', i, 'took', end_time - start_time, 'seconds')
@@ -317,10 +313,17 @@ class BasinHoppingBatch(BasinHoppingBase):
                 prev_perturb[j] = self.perturbs[rand_ind]
                 self.perturbs[rand_ind](new_atoms[j], num_atoms_perturb=num_atoms_perturb, num_unique=num_unique)
         avg_loss = 0
-        for j in range(len(min_ljr_loss)):
-            print('Structure', j, 'min ljr_loss', min_ljr_loss[j], 'best_hop', best_hop[j])
-            avg_loss += min_ljr_loss[j]
-        print('Avg loss', avg_loss / len(new_atoms))
-        min_atoms = atoms_to_dict(min_atoms, min_ljr_loss)
+        for j, hop in enumerate(best_hop):
+            print("Structure: ", j)
+            print('\tBest hop: ', hop)
+            print("\tObjective loss: ", res[j][hop]['objective_loss'])
+            print("\tEnergy loss: ", res[j][hop]['energy_loss'])
+            if getattr(objective_func, 'normalize', False):
+                print("\tUnnormalized energy loss: ", res[j][hop]['unnormalized_loss'])
+            print("\tNovel loss: ", res[j][hop]['novel_loss'])
+            print("\tSoft sphere loss: ", res[j][hop]['soft_sphere_loss'])
+            avg_loss += min_objective_loss[j]
+        print('Avg Objective Loss', avg_loss / len(new_atoms))
+        min_atoms = atoms_to_dict(min_atoms, min_objective_loss)
         return res, min_atoms, best_hop
 

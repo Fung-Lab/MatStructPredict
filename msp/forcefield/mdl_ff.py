@@ -19,7 +19,7 @@ from matdeeplearn.preprocessor.processor import process_data
 from matdeeplearn.trainers.base_trainer import BaseTrainer
 from matdeeplearn.trainers.property_trainer import PropertyTrainer
 from matdeeplearn.common.data import dataset_split
-from msp.structure.structure_util import atoms_to_data, data_to_atoms 
+from msp.structure.structure_util import atoms_to_data, data_to_atoms
 
 
 class MDL_FF(ForceField):
@@ -38,11 +38,9 @@ class MDL_FF(ForceField):
             with open(train_config, "r") as yaml_file:
                 self.train_config = yaml.safe_load(yaml_file)     
         #to be added
-        self.dataset = {}
-        dataset = self.process_data(dataset)
-        dataset = dataset['full']
+        self.dataset = self.process_data(dataset)
         self.dataset["train"], self.dataset["val"], self.dataset["test"] = dataset_split(
-                    dataset,
+                    self.dataset['full'],
                     self.train_config['dataset']['train_ratio'],
                     self.train_config['dataset']['val_ratio'],
                     self.train_config['dataset']['test_ratio'],
@@ -189,21 +187,52 @@ class MDL_FF(ForceField):
             out_list.append(self.trainer.model[i](batch_data))
                         
         out_stack = torch.stack([o["output"] for o in out_list])
+        embed_stack = torch.stack([o["embedding"] for o in out_list])
         output = {}
         output["potential_energy"] = torch.mean(out_stack, dim=0)
         output["potential_energy_uncertainty"] = torch.std(out_stack, dim=0)
+        output['embeddings'] = embed_stack
         #output is a dict        
         return output
 
     def _batched_forward(self, batch_data):
         def fmodel(params, buffers, x):
-            return functional_call(self.base_model, (params, buffers), (x,))['output']
-        out_stack = torch.vmap(fmodel, in_dims=(0, 0, None))(self.params, self.buffers, batch_data)
+            output = functional_call(self.base_model, (params, buffers), (x,))
+            return output['output'], output['embedding']
+        out_stack, embed_stack = torch.vmap(fmodel, in_dims=(0, 0, None))(self.params, self.buffers, batch_data)
         output = {}
         output["potential_energy"] = torch.mean(out_stack, dim=0)
         output["potential_energy_uncertainty"] = torch.std(out_stack, dim=0)
+        output['embeddings'] = embed_stack
         #output is a dict
         return output
+    
+    def get_embeddings(self, dataset, batch_size):
+        data_list = self.dataset['full']
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        for i in range(len(self.trainer.model)):
+            self.trainer.model[i].gradient = False
+        self.params, self.buffers = stack_module_state(self.trainer.model)
+        self.base_model = copy.deepcopy(self.trainer.model[0])
+        self.base_model = self.base_model.to('meta')
+        loader = DataLoader(data_list, batch_size=batch_size)
+        loader_iter = iter(loader)
+        embeddings = []
+        start_time = time.time()
+        temp = 0
+        with torch.no_grad():
+            for i in range(len(loader_iter)):
+                batch = next(loader_iter).to(device)
+                embeddings.append(self._batched_forward(batch)['embeddings'])
+                if (i*len(batch)) > temp + 1000:
+                    print('Structures', temp + 1, 'to', i*len(batch), 'took', time.time() - start_time)
+                    temp = i * len(batch)
+                    start_time = time.time()
+        for i in range(len(self.trainer.model)):
+            self.trainer.model[i].gradient = True
+        return torch.cat(embeddings, dim=1)
+
+
         
     def create_ase_calc(self):
         """
@@ -234,7 +263,7 @@ class MDL_FF(ForceField):
             old_energy (list): A list of the energies of the initial structures.
         """
         data_list = atoms_to_data(atoms)
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")        
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         for i in range(len(self.trainer.model)):
             self.trainer.model[i].gradient = False
         self.params, self.buffers = stack_module_state(self.trainer.model)
@@ -244,10 +273,10 @@ class MDL_FF(ForceField):
         loader = DataLoader(data_list, batch_size=batch_size)
         loader_iter = iter(loader)
         res_atoms = []
-        ljr_loss = []
-        init_ljr_loss = []
-        res_loss = []     
-        init_loss = []
+        obj_loss = []
+        energy_loss = []
+        novel_loss = []
+        soft_sphere_loss = []
         
         print("device:", device)                       
         for i in range(len(loader_iter)):
@@ -255,54 +284,60 @@ class MDL_FF(ForceField):
             if getattr(objective_func, 'normalize', False):
                 objective_func.set_norm_offset(batch.z, batch.n_atoms)
             pos, cell = batch.pos, batch.cell
+            # batch.z = batch.z.type(torch.float32)
+            # optimized_z = batch.z
 
             opt = getattr(torch.optim, optim, 'Adam')([pos, cell], lr=learning_rate)
 
             pos.requires_grad_(True)
+            # optimized_z.requires_grad_(True)
             if cell_relax:
                 cell.requires_grad_(True)
 
-            temp_ljr = [0, 0]
-            temp = [0, 0]
+            temp_obj = [0]
+            temp_energy = [0]
+            temp_novel = [0]
+            temp_soft_sphere = [0]
             step = [0]
-            def closure(step, temp_ljr, temp, batch):
+            def closure(step, temp_obj, temp_energy, temp_novel, temp_soft_sphere, batch):
                 opt.zero_grad()
                 output = self._batched_forward(batch)
-                ljr_loss, loss = objective_func(output, batch)
-                ljr_loss.mean().backward(retain_graph=True)
+                objective_loss, energy_loss, novel_loss, soft_sphere_loss = objective_func(output, batch)
+                objective_loss.mean().backward(retain_graph=True)
+                
                 curr_time = time.time() - start_time
-                if log_per > 0 and step[0] % log_per == 0:                    
+                if log_per > 0 and step[0] % log_per == 0:                
                     #print("{}  {0:4d}   {1: 3.6f}".format(output, step[0], loss.mean().item()))  
                     if cell_relax:    
                         print("Structure ID: {}, Step: {}, LJR Loss: {:.6f}, Pos Gradient: {:.6f}, Cell Gradient: {:.6f}, Time: {:.6f}".format(len(batch.structure_id), 
-                        step[0], ljr_loss.mean().item(), pos.grad.abs().mean().item(), cell.grad.abs().mean().item(), curr_time))  
+                        step[0], objective_loss.mean().item(), pos.grad.abs().mean().item(), cell.grad.abs().mean().item(), curr_time))
                     else:
                         print("Structure ID: {}, Step: {}, LJR Loss: {:.6f}, Pos Gradient: {:.6f}, Time: {:.6f}".format(len(batch.structure_id), 
-                        step[0], ljr_loss.mean().item(), pos.grad.abs().mean().item(), curr_time))
-                if step[0] == 0:
-                    temp_ljr[1] = ljr_loss
-                    temp[1] = loss
+                        step[0], objective_loss.mean().item(), pos.grad.abs().mean().item(), curr_time))
                 step[0] += 1
                 batch.pos, batch.cell = pos, cell
-                temp_ljr[0] = ljr_loss
-                temp[0] = loss
-                return ljr_loss.mean()
+                # batch.z = optimized_z
+                temp_obj[0] = objective_loss
+                temp_energy[0] = energy_loss
+                temp_novel[0] = novel_loss
+                temp_soft_sphere[0] = soft_sphere_loss
+                return objective_loss.mean()
             for _ in range(steps):
                 start_time = time.time()
                 old_step = step[0]
-                opt.step(lambda: closure(step, temp_ljr, temp, batch))
+                opt.step(lambda: closure(step, temp_obj, temp_energy, temp_novel, temp_soft_sphere, batch))
                 # print('optimizer step time', time.time()-start_time)
                 # print('steps taken', step[0] - old_step)
             res_atoms.extend(data_to_atoms(batch))
-            ljr_loss.extend(temp_ljr[0].cpu().detach().numpy())
-            init_ljr_loss.extend(temp_ljr[1].cpu().detach().numpy())
-            res_loss.extend(temp[0].cpu().detach().numpy())
-            init_loss.extend(temp[1].cpu().detach().numpy())
-       
+            obj_loss.extend(temp_obj[0].cpu().detach().numpy())
+            energy_loss.extend(temp_energy[0].cpu().detach().numpy())
+            novel_loss.extend(temp_novel[0].cpu().detach().numpy())
+            soft_sphere_loss.extend(temp_soft_sphere[0].cpu().detach().numpy())
+            batch.z = batch.z.type(torch.int64)   
         for i in range(len(self.trainer.model)):
             self.trainer.model[i].gradient = True           
 
-        return res_atoms, ljr_loss, init_ljr_loss, res_loss, init_loss
+        return res_atoms, obj_loss, energy_loss, novel_loss, soft_sphere_loss
     
     def from_config_train(self, config, dataset, max_epochs=None, lr=None, batch_size=None):
         """
