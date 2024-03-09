@@ -1,5 +1,4 @@
 import sys
-sys.path.append(r'C:\Users\iamhe\MatStructPredict')
 from msp.dataset import download_dataset, load_dataset, combine_dataset, update_dataset
 from msp.composition import generate_random_compositions, sample_random_composition
 from msp.forcefield import MDL_FF, MACE_FF, M3GNet_FF
@@ -31,11 +30,11 @@ max_iterations=1
 #Initialize a forcefield class, reading in from config (we use MDL_FF but it can be a force field from another library)
 train_config = 'mdl_config.yml'
 forcefield = MDL_FF(train_config, my_dataset)
-embeddings = forcefield.get_embeddings(my_dataset, batch_size=64)
+# embeddings = forcefield.get_embeddings(my_dataset, batch_size=64)
 
 #predictor = BasinHoppingASE(forcefield, hops=5, steps=100, optimizer="FIRE", dr=0.5)
 
-predictor_batch = BasinHoppingBatch(forcefield, hops=100, steps=100, dr=0.6, optimizer='Adam', batch_size=30)
+predictor_batch = BasinHoppingBatch(forcefield, hops=10, steps=100, dr=0.6, optimizer='Adam', batch_size=30)
 
 
 # forcefield_mace = MACE_FF()
@@ -55,7 +54,7 @@ for i in range(0, max_iterations):
     # compositions are a dictionary of {element:amount}
     # compositions = sample_random_composition(dataset=my_dataset, n=1)
     # or manually specify the list of lists:
-    compositions = [[22, 22, 22, 22, 22, 22, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8] for _ in range(10)]
+    compositions = [[22, 22, 22, 22, 22, 22, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8] for _ in range(1)]
     initial_structures = [init_structure(c, pyxtal=False) for c in compositions]
     read_structure = ase.io.read("init.cif")
     # initial_structures=[atoms_to_dict([read_structure], loss=[None])]
@@ -83,12 +82,10 @@ for i in range(0, max_iterations):
     # alternatively if we dont use ASE, we can optimize in batch, and optimize over multiple objectives as well
     # we do this by first initializing our objective function, which is similar to the loss function class in matdeeplearn
     # objective_func = UpperConfidenceBound(c=0.1)
+    objective_func = Energy(normalize=True, ljr_ratio=1)
+    # objective_func = EmbeddingDistance(embeddings, normalize=True, energy_ratio=1, ljr_ratio=1, ljr_scale=.7, embedding_ratio=.1)
     #objective_func = EnergyAndUncertainty(normalize=True, uncertainty_ratio=.5, ljr_ratio=100)
-    objective_func = EmbeddingDistance(embeddings, normalize=True, energy_ratio=1, ljr_ratio=1, ljr_scale=.7, embedding_ratio=.1)
     total_list_batch, minima_list_batch, best_hop, energies, accepts, accept_rate, temps, step_sizes = predictor_batch.predict(initial_structures, objective_func, batch_size=32, log_per=5, lr=.05)
-    #alternatively if we dont use ASE, we can optimize in batch, and optimize over multiple objectives as well
-    #we do this by first initializing our objective function, which is similar to the loss function class in matdeeplearn
-    #objective_func = UpperConfidenceBound(c=0.1)
     minima_list_batch = dict_to_atoms(minima_list_batch)
     for j, minima in enumerate(minima_list_batch):
         filename = "iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"

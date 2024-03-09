@@ -69,7 +69,7 @@ class Energy(torch.nn.Module):
             for i in range(len(model_output['potential_energy'])):
                 model_output['potential_energy'][i] = (model_output['potential_energy'][i] + self.offset[i]) / batch.n_atoms[i]
         ljr = self.lj_repulsion(batch, power=self.ljr_power)
-        return self.energy_ratio * model_output["potential_energy"] + self.ljr_ratio * ljr, model_output["potential_energy"], 0, ljr
+        return self.energy_ratio * model_output["potential_energy"] + self.ljr_ratio * ljr, model_output["potential_energy"], torch.zeros(len(model_output['potential_energy']), 1).to(ljr.device), ljr
     
     def norm_to_raw_loss(self, loss, z):
         offset = 0
