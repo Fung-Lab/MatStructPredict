@@ -2,7 +2,7 @@ from ase.data import chemical_symbols
 import numpy as np
 import random
 
-def generate_random_compositions(dataset, n=5, max_elements=5, max_atoms=10, max_atom_num=100):
+def generate_random_compositions(dataset, n=5, max_elements=5, max_atoms=10):
     """
     Generate n unique compositions that do not appear in dataset randomly
 
@@ -24,7 +24,7 @@ def generate_random_compositions(dataset, n=5, max_elements=5, max_atoms=10, max
         while True:
             comp = []
             num_atoms = np.random.randint(1, max_elements + 1)
-            random_atoms = np.random.randint(1, max_atom_num, size=num_atoms)
+            random_atoms = np.random.randint(1, 101, size=num_atoms)
             random_atoms = np.sort(random_atoms)
             for atom in random_atoms:
                 comp.extend([atom] * np.random.randint(1, max_atoms))

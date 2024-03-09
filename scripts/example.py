@@ -1,3 +1,4 @@
+import sys
 from msp.dataset import download_dataset, load_dataset, combine_dataset, update_dataset
 from msp.composition import generate_random_compositions, sample_random_composition
 from msp.forcefield import MDL_FF, MACE_FF, M3GNet_FF
@@ -14,37 +15,37 @@ from ase import io
 from pymatgen.analysis.structure_matcher import StructureMatcher
 from pymatgen.io.ase import AseAtomsAdaptor
 
-from matminer.featurizers.site import CrystalNNFingerprint
-from matminer.featurizers.structure import SiteStatsFingerprint
+import matplotlib.pyplot  as plt
 
-# download dataset from Materials Project
-# return dataset class or dict
+#download dataset from Materials Project
+#return dataset class or dict
 my_dataset = download_dataset(repo="MP", save=True)
-# or load dataset from disk:
+#or load dataset from disk:
 
-# my_dataset = load_dataset(path ="path/to/dataset")
+#my_dataset = load_dataset(path ="path/to/dataset")
 my_dataset = json.load(open("../data/data_subset_msp.json", "r"))
-# print(my_dataset[0])
-
+#print(my_dataset[0])
 max_iterations=1
+
 #Initialize a forcefield class, reading in from config (we use MDL_FF but it can be a force field from another library)
 train_config = 'mdl_config.yml'
 forcefield = MDL_FF(train_config, my_dataset)
 # embeddings = forcefield.get_embeddings(my_dataset, batch_size=64)
 
-predictor = BasinHoppingASE(forcefield, hops=5, steps=100, optimizer="FIRE", dr=0.5, perturbs=['pos'])
+#predictor = BasinHoppingASE(forcefield, hops=5, steps=100, optimizer="FIRE", dr=0.5)
 
 predictor_batch = BasinHoppingBatch(forcefield, hops=10, steps=100, dr=0.6, optimizer='Adam', batch_size=30)
+
 
 # forcefield_mace = MACE_FF()
 # predictor_mace = BasinHoppingASE(forcefield_mace, hops=5, steps=100, optimizer="FIRE", dr=0.5)
 
 # forcefield_m3gnet = M3GNet_FF()
 # predictor_m3gnet = BasinHoppingASE(forcefield_m3gnet, hops=5, steps=100, optimizer="FIRE", dr=0.5)
-# train the forcefield (optional)
-# forcefield.train(my_dataset, .09, .05, .05, max_epochs=1)
-# to load saved model, use update and put the path to file in checkpoint_path in the train_config
-# forcefield.update(my_dataset, .09, .05, .05, max_epochs=1)
+#train the forcefield (optional)
+#forcefield.train(my_dataset, .09, .05, .05, max_epochs=1)
+#to load saved model, use update and put the path to file in checkpoint_path in the train_config
+#forcefield.update(my_dataset, .09, .05, .05, max_epochs=1)
 
 #active learning loop
 for i in range(0, max_iterations):
@@ -58,10 +59,9 @@ for i in range(0, max_iterations):
     read_structure = ase.io.read("init.cif")
     # initial_structures=[atoms_to_dict([read_structure], loss=[None])]
 
-
-
     #forcefield itself is not an ase calculator, but can be used to return the MDLCalculator class
     #initialize the predictor class, this is the BasinHopping version which uses an ASE calculator, but we can have another version for batched search
+
     # total_list, minima_list = predictor.predict(initial_structures)
     # minima_list = dict_to_atoms(minima_list)
     # for j, minima in enumerate(minima_list):
@@ -84,7 +84,8 @@ for i in range(0, max_iterations):
     # objective_func = UpperConfidenceBound(c=0.1)
     objective_func = Energy(normalize=True, ljr_ratio=1)
     # objective_func = EmbeddingDistance(embeddings, normalize=True, energy_ratio=1, ljr_ratio=1, ljr_scale=.7, embedding_ratio=.1)
-    total_list_batch, minima_list_batch, best_hop = predictor_batch.predict(initial_structures, objective_func, batch_size=32, log_per=5, lr=.05)
+    #objective_func = EnergyAndUncertainty(normalize=True, uncertainty_ratio=.5, ljr_ratio=100)
+    total_list_batch, minima_list_batch, best_hop, energies, accepts, accept_rate, temps, step_sizes = predictor_batch.predict(initial_structures, objective_func, batch_size=32, log_per=5, lr=.05)
     minima_list_batch = dict_to_atoms(minima_list_batch)
     for j, minima in enumerate(minima_list_batch):
         filename = "iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
@@ -104,26 +105,57 @@ for i in range(0, max_iterations):
             f.write("\t\tComposition: " +str(hop['composition'])+ '\n')
             f.write("\t\tperturb: " +str(hop['perturb'])+ '\n')
     f.close()
-        
+    for i, energy_list in enumerate(energies):
+        plt.scatter(range(len(energy_list)), energy_list, label=f'Structure {i + 1}',
+                    color=['g' if a else 'r' for a in accepts[i]])
+    plt.xlabel('Steps')
+    plt.ylabel('Energies')
+    plt.legend()
+    plt.show()
+    plt.close()
+
+    for i, accept_rate_list in enumerate(accept_rate):
+        plt.scatter(range(len(accept_rate_list)), accept_rate_list, label=f'Structure {i + 1}')
+    plt.xlabel('Steps')
+    plt.ylabel('Accept Rate')
+    plt.legend()
+    plt.show()
+    plt.close()
+
+    for i, temps_list in enumerate(temps):
+        plt.scatter(range(len(temps_list)), temps_list, label=f'Structure {i + 1}')
+    plt.xlabel('Steps')
+    plt.ylabel('Temps')
+    plt.legend()
+    plt.show()
+    plt.close()
+
+    plt.scatter(range(len(step_sizes)), step_sizes)
+    plt.xlabel('Steps')
+    plt.ylabel('Step Sizes')
+    plt.legend()
+    plt.show()
+    plt.close()
+
                   
-    # total_list_mace, minima_list_mace = predictor_mace.predict(initial_structures)    
+    # minima_list_mace = predictor_mace.predict(initial_structures)    
     # minima_list_mace = dict_to_atoms(minima_list_mace)
     # for j, minima in enumerate(minima_list_mace):
     #     filename = "iteration_"+str(i)+"_structure_"+str(j)+"_mace.cif"
     #     ase.io.write(filename, minima)
        
     
-    # total_list_m3gnet, minima_list_m3gnet = predictor_m3gnet.predict(initial_structures)   
+    # minima_list_m3gnet = predictor_m3gnet.predict(initial_structures)   
     # minima_list_m3gnet = dict_to_atoms(minima_list_m3gnet)
     # for j, minima in enumerate(minima_list_m3gnet):
     #     filename = "iteration_"+str(i)+"_structure_"+str(j)+"_m3gnet.cif"
     #     ase.io.write(filename, minima)
     
     #check if the true structure has been found (either yes or no)   
-    adaptor = AseAtomsAdaptor
-    structure_matcher = StructureMatcher(ltol = 0.3, stol = 0.3, angle_tol = 5, primitive_cell = True, scale = True)
+    #adaptor = AseAtomsAdaptor
+    #structure_matcher = StructureMatcher(ltol = 0.3, stol = 0.3, angle_tol = 5, primitive_cell = True, scale = True)
     # print(structure_matcher.fit(adaptor.get_structure(read_structure), adaptor.get_structure(minima_list[0])))
-    print(structure_matcher.fit(adaptor.get_structure(read_structure), adaptor.get_structure(minima_list_batch[0])))
+    #print(structure_matcher.fit(adaptor.get_structure(read_structure), adaptor.get_structure(minima_list_batch[0])))
     # print(structure_matcher.fit(adaptor.get_structure(read_structure), adaptor.get_structure(minima_list_mace[0])))
     # print(structure_matcher.fit(adaptor.get_structure(read_structure), adaptor.get_structure(minima_list_m3gnet[0])))
     #print(structure_matcher.get_rms_dist(adaptor.get_structure(read_structure), adaptor.get_structure(minima_list[0])))
@@ -131,17 +163,17 @@ for i in range(0, max_iterations):
     #print(structure_matcher.get_rms_dist(adaptor.get_structure(read_structure), adaptor.get_structure(minima_list_mace[0])))
     #print(structure_matcher.get_rms_dist(adaptor.get_structure(read_structure), adaptor.get_structure(minima_list_m3gnet[0]))) 
        
-    # quantify structure similairy, continous from 1 to 0
-    # see: https://docs.materialsproject.org/methodology/materials-methodology/related-materials
-    # matminer may need older version of numpy==1.23.5
-    ssf = SiteStatsFingerprint(CrystalNNFingerprint.from_preset('ops', distance_cutoffs=None, x_diff_weight=0), stats=('mean', 'std_dev', 'minimum', 'maximum'))
-    target = np.array(ssf.featurize(adaptor.get_structure(read_structure)))
+    #quantify structure similairy, continous from 1 to 0
+    #see: https://docs.materialsproject.org/methodology/materials-methodology/related-materials
+    #matminer may need older version of numpy==1.23.5
+    #ssf = SiteStatsFingerprint(CrystalNNFingerprint.from_preset('ops', distance_cutoffs=None, x_diff_weight=0), stats=('mean', 'std_dev', 'minimum', 'maximum'))
+    #target = np.array(ssf.featurize(adaptor.get_structure(read_structure)))
     # mdl = np.array(ssf.featurize(adaptor.get_structure(minima_list[0])))
-    mdl_batch = np.array(ssf.featurize(adaptor.get_structure(minima_list_batch[0])))
+    #mdl_batch = np.array(ssf.featurize(adaptor.get_structure(minima_list_batch[0])))
     # mace = np.array(ssf.featurize(adaptor.get_structure(minima_list_mace[0])))
     # m3gnet = np.array(ssf.featurize(adaptor.get_structure(minima_list_m3gnet[0])))
     # print('Distance between target and mdl: {:.4f}'.format(np.linalg.norm(target - mdl)))
-    print('Distance between target and mdl_batch: {:.4f}'.format(np.linalg.norm(target - mdl_batch)))
+    #print('Distance between target and mdl_batch: {:.4f}'.format(np.linalg.norm(target - mdl_batch)))
     # print('Distance between target and mace: {:.4f}'.format(np.linalg.norm(target - mace)))
     # print('Distance between target and m3gnet: {:.4f}'.format(np.linalg.norm(target - m3gnet)))
     
