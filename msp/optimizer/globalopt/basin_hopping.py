@@ -33,11 +33,11 @@ class BasinHoppingBase(Optimizer):
         self.perturbs.append(self.perturbPos)
         self.optimizer = optimizer
         self.perturbs.append(self.perturbCell)
-        self.perturbs.append(self.perturbAtomicNum)
-        self.perturbs.append(self.addAtom)
-        self.perturbs.append(self.removeAtom)
-        self.perturbs.append(self.swapAtom)
-    
+        #self.perturbs.append(self.perturbAtomicNum)
+        #self.perturbs.append(self.addAtom)
+        #self.perturbs.append(self.removeAtom)
+        #self.perturbs.append(self.swapAtom)
+
     def perturbPos(self, atoms, **kwargs):
         """
         Perturbs the positions of the atoms in the structure
@@ -45,10 +45,9 @@ class BasinHoppingBase(Optimizer):
         if isinstance(atoms, ExpCellFilter):
             disp = np.random.uniform(-1., 1., (len(atoms.atoms), 3)) * self.dr
             atoms.atoms.set_scaled_positions(atoms.atoms.get_scaled_positions() + disp)
-        else:  
+        else:
             disp = np.random.uniform(-1., 1., (len(atoms), 3)) * self.dr
-            atoms.set_scaled_positions(atoms.get_scaled_positions() + disp) 
-        
+            atoms.set_scaled_positions(atoms.get_scaled_positions() + disp)
 
     def perturbCell(self, atoms, **kwargs):
         """
@@ -60,7 +59,6 @@ class BasinHoppingBase(Optimizer):
         else:
             disp = np.random.uniform(-1., 1., (3, 3)) * self.dr
             atoms.set_cell(atoms.get_cell()[:] + disp)
-        
 
     def perturbAtomicNum(self, atoms, num_atoms_perturb=1, **kwargs):
         """
@@ -93,7 +91,7 @@ class BasinHoppingBase(Optimizer):
             pos = atoms.get_scaled_positions()
             pos[-1] = np.random.uniform(0., 1., (1, 3))
             atoms.set_scaled_positions(pos)
-    
+
     def removeAtom(self, atoms, **kwargs):
         """
         Removes an atom from the structure
@@ -118,11 +116,26 @@ class BasinHoppingBase(Optimizer):
             nums[rand_ind[0]], nums[rand_ind[1]] = nums[rand_ind[1]], nums[rand_ind[0]]
             atoms.set_atomic_numbers(nums)
 
+    def change_temp(self, temp, accepts, interval=10, target_ratio=0.5, rate=0.1):
+        if len(accepts) % interval == 0 and len(accepts) != 0:
+            if sum(accepts[-interval:]) / interval <= target_ratio:
+                temp *= 1 + rate
+            else:
+                temp /= 1 + rate
+            temp = max(0.00001, min(temp, 2))
 
-        
-        
+        return temp
 
+    def change_dr(self, accepts, interval=10, target_ratio=0.5, rate=0.1):
+        if len(accepts) % interval == 0 and len(accepts) != 0:
+            if sum(accepts[-interval:]) / interval <= target_ratio:
+                self.dr /= 1 + rate
+            else:
+                self.dr *= 1 + rate
+            self.dr = max(0.1, min(self.dr, 1))
 
+    def accept(self, old_energy, newEnergy, temp):
+        return np.random.rand() < np.exp(-(newEnergy - old_energy) / temp)
 
 class BasinHoppingASE(BasinHoppingBase):
 
@@ -139,7 +152,8 @@ class BasinHoppingASE(BasinHoppingBase):
             max_atom_num (int, optional): maximum atom number to be considered, exclusive. Defaults to 101.
         """
 
-        super().__init__("BasinHoppingASE", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, **kwargs)
+        super().__init__("BasinHoppingASE", hops=hops, steps=steps, optimizer=optimizer, dr=dr,
+                         max_atom_num=max_atom_num, **kwargs)
         self.calculator = forcefield.create_ase_calc()
 
     def predict(self, structures, cell_relax=True, topk=1, num_atoms_perturb=1, density=.2):
@@ -161,7 +175,7 @@ class BasinHoppingASE(BasinHoppingBase):
         curr_atoms = deepcopy(atoms)
         min_energy = [1e10] * len(min_atoms)
         res = []
-        
+
         for index, atom in enumerate(curr_atoms):
             atom.set_calculator(self.calculator)
             if cell_relax:
@@ -189,14 +203,17 @@ class BasinHoppingASE(BasinHoppingBase):
                     temp = atom.atoms
                 else:
                     temp = atom
-                res[-1].append({'hop': i, 'init_loss': old_energy, 'loss': optimized_energy, 'perturb': prev_perturb.__name__, 'composition': temp.get_atomic_numbers(), 'structure': atoms_to_dict([temp], [optimized_energy])[0]})
+                res[-1].append(
+                    {'hop': i, 'init_loss': old_energy, 'loss': optimized_energy, 'perturb': prev_perturb.__name__,
+                     'composition': temp.get_atomic_numbers(),
+                     'structure': atoms_to_dict([temp], [optimized_energy])[0]})
                 prev_perturb = self.perturbs[np.random.randint(len(self.perturbs))]
                 prev_perturb(atom, num_atoms_perturb=num_atoms_perturb)
             print('Structure', index, 'Min energy', min_energy[index])
         min_atoms = atoms_to_dict(min_atoms, min_energy)
         return res, min_atoms
-        
-        
+
+
 class BasinHoppingBatch(BasinHoppingBase):
     def __init__(self, forcefield, hops=5, steps=100, optimizer="Adam", dr=.5, max_atom_num=100, **kwargs):
         """
@@ -210,12 +227,14 @@ class BasinHoppingBatch(BasinHoppingBase):
             dr (int, optional): rate at which to change values. Defaults to .5.
             max_atom_num (int, optional): maximum atom number to be considered, exclusive. Defaults to 101.
         """
-        super().__init__("BasinHopping", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, **kwargs)
+        super().__init__("BasinHopping", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num,
+                         **kwargs)
         self.forcefield = forcefield
-    
-    def predict(self, structures, objective_func, cell_relax=True, topk=1, batch_size=4, log_per=0, lr=.05, density=.2, num_atoms_perturb=1):
+
+    def predict(self, structures, objective_func, cell_relax=True, topk=1, batch_size=4, log_per=0, lr=.05, density=.2,
+                num_atoms_perturb=1):
         """
-        Optimizes the list of compositions in batches 
+        Optimizes the list of compositions in batches
 
         Args:
             atoms (list): A list of dictionaries representing atomic structures
@@ -231,28 +250,65 @@ class BasinHoppingBatch(BasinHoppingBase):
         Returns:
             list: A list of ase.Atoms objects representing the predicted minima
         """
+
         atoms = dict_to_atoms(structures)
         min_atoms = deepcopy(atoms)
         min_loss = [1e10] * len(min_atoms)
+        best_atoms, best_loss = min_atoms, min_loss
         best_hop = [0] * len(min_atoms)
         prev_perturb = [self.perturbPos] * len(min_atoms)
+
+        accepts = [[] for _ in range(len(atoms))]
+        accept_rate = [[] for _ in range(len(atoms))]
+        temps = [[] for _ in range(len(atoms))]
+        energies = [[] for _ in range(len(atoms))]
+        step_sizes = []
+        temp = [0.0001 for _ in range(len(atoms))]
+
+        prev_step_loss = min_loss
+
         res = []
         for _ in range(len(min_atoms)):
             res.append([])
         for i in range(self.hops):
             start_time = time()
-            newAtoms, new_loss, prev_loss = self.forcefield.optimize(atoms, self.steps, objective_func, log_per, lr, batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer)
+
+            newAtoms, new_loss, prev_loss = self.forcefield.optimize(atoms, self.steps, objective_func, log_per, lr,
+                                                                     batch_size=batch_size, cell_relax=cell_relax,
+                                                                     optim=self.optimizer)
+            self.change_dr(accepts[0], rate=0.1)
+            if len(accepts[j]) % 10 == 0:
+                step_sizes.append(self.dr)
             end_time = time()
-            print('HOP', i, 'took', end_time - start_time, 'seconds')
             for j in range(len(newAtoms)):
+                temp[j] = self.change_temp(temp[j], accepts[j], rate=0.1)
+
                 print('\tStructure', j)
-                print('\t\tHOP', i, 'previous energy', prev_loss[j])
-                print('\t\tHOP', i, 'optimized energy', new_loss[j])  
-                if new_loss[j] < min_loss[j]:
+                print('\t\tHOP', i, 'previous energy', prev_step_loss[j])
+                print('\t\tHOP', i, 'optimized energy', new_loss[j])
+
+                accept = self.accept(prev_step_loss[j], new_loss[j], temp[j])
+                print("Accept:", accept)
+                if accept:
                     min_loss[j] = new_loss[j]
                     min_atoms[j] = newAtoms[j].copy()
                     best_hop[j] = i
-                res[j].append({'hop': i, 'init_loss': prev_loss[j][0], 'loss': new_loss[j][0], 'perturb': prev_perturb[j].__name__, 'composition': newAtoms[j].get_atomic_numbers(), 'structure': atoms_to_dict([newAtoms[j]], new_loss[j])[0]})
+                    if min_loss[j] < best_loss:
+                        best_loss[j] = min_loss[j]
+                        best_atoms[j] = min_atoms[j]
+                        #best_hop[j] = i
+
+                prev_step_loss[j] = new_loss[j]
+
+                energies[j].append(new_loss[j])
+                accepts[j].append(accept)
+                if len(accepts[j]) % 10 == 0:
+                    accept_rate[j].append(sum(accepts[j][-10:]))
+                    temps[j].append(temp[j])
+
+                res[j].append({'hop': i, 'init_loss': prev_loss[j][0], 'loss': new_loss[j][0],
+                               'perturb': prev_perturb[j].__name__, 'composition': newAtoms[j].get_atomic_numbers(),
+                               'structure': atoms_to_dict([newAtoms[j]], new_loss[j])[0]})
             atoms = deepcopy(min_atoms)
             print('HOP', i, 'took', end_time - start_time, 'seconds')
             for j in range(len(atoms)):
@@ -262,8 +318,11 @@ class BasinHoppingBatch(BasinHoppingBase):
         avg_loss = 0
         for j in range(len(newAtoms)):
             print('Structure', j, 'min energy', min_loss[j], 'best_hop', best_hop[j])
+            #print('Structure', j, 'min energy', best_loss[j], 'best_hop', best_hop[j])
             avg_loss += min_loss[j]
+            #avg_loss += best_loss[j]
         print('Avg loss', avg_loss / len(newAtoms))
         min_atoms = atoms_to_dict(min_atoms, min_loss)
-        return res, min_atoms
+        #min_atoms = atoms_to_dict(best_atoms, best_loss)
+        return res, min_atoms, energies, accepts, accept_rate, temps, step_sizes
 
