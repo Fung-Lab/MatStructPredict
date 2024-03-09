@@ -12,6 +12,9 @@ msp/dataset/__init__.py
 msp/dataset/dataset.py
 msp/forcefield/__init__.py
 msp/forcefield/base.py
+msp/forcefield/chgnet_ff.py
+msp/forcefield/m3gnet_ff.py
+msp/forcefield/mace_ff.py
 msp/forcefield/mdl_ff.py
 msp/runner/__init__.py
 msp/structure/__init__.py
