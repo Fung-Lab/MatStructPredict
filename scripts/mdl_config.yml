@@ -13,7 +13,9 @@ task:
   # spefcify if the training state is loaded: epochs, learning rate, etc
   load_training_state: False
   # Path to the checkpoint.pt file
-  checkpoint_path: ../pretrained_models/best_checkpoint.pt
+  checkpoint_path: "../ensemble_model/torchmd-1/checkpoint_0/best_checkpoint.pt,../ensemble_model/torchmd-2/checkpoint_0/best_checkpoint.pt,../ensemble_model/torchmd-3/checkpoint_0/best_checkpoint.pt,../ensemble_model/torchmd-4/checkpoint_0/best_checkpoint.pt,../ensemble_model/torchmd-5/checkpoint_0/best_checkpoint.pt"
+  #checkpoint_path: "../pretrained_models/best_checkpoint.pt"
+  #checkpoint_path: "../ensemble_model/torchmd-1/checkpoint_0/best_checkpoint.pt"
   # Whether to write predictions to csv file. E.g. ["train", "val", "test"]
   write_output: [train, val, test]
   # Frequency of writing to file; 0 denotes writing only at the end, 1 denotes writing every time
@@ -26,7 +28,7 @@ task:
   use_amp: True  
 
 model:
-  name: torchmd_etEarly
+  name: torchmd_et
   # model attributes
   hidden_channels: 128
   num_layers: 8
@@ -37,6 +39,7 @@ model:
   num_post_layers: 1
   post_hidden_channels: 64
   pool: "global_add_pool"
+  pool_order: "late"
   aggr: "add"
   dropout_rate: 0.0
   # Compute edge indices on the fly in the model forward
@@ -47,7 +50,7 @@ model:
   otf_node_attr: True
   # compute gradients w.r.t to positions and cell, requires otf_edge_attr=True      
   gradient: True
-  model_ensemble: 1
+  model_ensemble: 5
 
 optim:
   max_epochs: 5

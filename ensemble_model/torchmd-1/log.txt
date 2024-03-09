@@ -1,0 +1,294 @@
+Loading dataset to cpu
+Using PyTorch automatic mixed-precision
+GPU is available: True, Quantity: None
+Dataset(s) used:
+Dataset length: ('train', 177907)
+Dataset length: ('val', 9363)
+Dataset length: ('test', 0)
+Data(n_atoms=[1], pos=[48, 3], cell=[1, 3, 3], structure_id=[1], z=[48], u=[1, 3], y=[1, 1], forces=[48, 3], stress=[1, 3, 3], x=[48, 100])
+tensor(3)
+tensor([-334.1599])
+
+--------------------------------------------------------------------------
+               Layer.Parameter    Param Tensor Shape              Param #
+--------------------------------------------------------------------------
+              embedding.weight            [100, 128]                12800
+      distance_expansion.means                  [50]                   50
+      distance_expansion.betas                  [50]                   50
+neighbor_embedding.embedding.weight            [100, 128]                12800
+neighbor_embedding.distance_proj.weight             [128, 50]                 6400
+neighbor_embedding.distance_proj.bias                 [128]                  128
+neighbor_embedding.combine.weight            [128, 256]                32768
+neighbor_embedding.combine.bias                 [128]                  128
+attention_layers.0.layernorm.weight                 [128]                  128
+attention_layers.0.layernorm.bias                 [128]                  128
+attention_layers.0.q_proj.weight            [128, 128]                16384
+attention_layers.0.q_proj.bias                 [128]                  128
+attention_layers.0.k_proj.weight            [128, 128]                16384
+attention_layers.0.k_proj.bias                 [128]                  128
+attention_layers.0.v_proj.weight            [384, 128]                49152
+attention_layers.0.v_proj.bias                 [384]                  384
+attention_layers.0.o_proj.weight            [384, 128]                49152
+attention_layers.0.o_proj.bias                 [384]                  384
+attention_layers.0.vec_proj.weight            [384, 128]                49152
+attention_layers.0.dk_proj.weight             [128, 50]                 6400
+attention_layers.0.dk_proj.bias                 [128]                  128
+attention_layers.0.dv_proj.weight             [384, 50]                19200
+attention_layers.0.dv_proj.bias                 [384]                  384
+attention_layers.1.layernorm.weight                 [128]                  128
+attention_layers.1.layernorm.bias                 [128]                  128
+attention_layers.1.q_proj.weight            [128, 128]                16384
+attention_layers.1.q_proj.bias                 [128]                  128
+attention_layers.1.k_proj.weight            [128, 128]                16384
+attention_layers.1.k_proj.bias                 [128]                  128
+attention_layers.1.v_proj.weight            [384, 128]                49152
+attention_layers.1.v_proj.bias                 [384]                  384
+attention_layers.1.o_proj.weight            [384, 128]                49152
+attention_layers.1.o_proj.bias                 [384]                  384
+attention_layers.1.vec_proj.weight            [384, 128]                49152
+attention_layers.1.dk_proj.weight             [128, 50]                 6400
+attention_layers.1.dk_proj.bias                 [128]                  128
+attention_layers.1.dv_proj.weight             [384, 50]                19200
+attention_layers.1.dv_proj.bias                 [384]                  384
+attention_layers.2.layernorm.weight                 [128]                  128
+attention_layers.2.layernorm.bias                 [128]                  128
+attention_layers.2.q_proj.weight            [128, 128]                16384
+attention_layers.2.q_proj.bias                 [128]                  128
+attention_layers.2.k_proj.weight            [128, 128]                16384
+attention_layers.2.k_proj.bias                 [128]                  128
+attention_layers.2.v_proj.weight            [384, 128]                49152
+attention_layers.2.v_proj.bias                 [384]                  384
+attention_layers.2.o_proj.weight            [384, 128]                49152
+attention_layers.2.o_proj.bias                 [384]                  384
+attention_layers.2.vec_proj.weight            [384, 128]                49152
+attention_layers.2.dk_proj.weight             [128, 50]                 6400
+attention_layers.2.dk_proj.bias                 [128]                  128
+attention_layers.2.dv_proj.weight             [384, 50]                19200
+attention_layers.2.dv_proj.bias                 [384]                  384
+attention_layers.3.layernorm.weight                 [128]                  128
+attention_layers.3.layernorm.bias                 [128]                  128
+attention_layers.3.q_proj.weight            [128, 128]                16384
+attention_layers.3.q_proj.bias                 [128]                  128
+attention_layers.3.k_proj.weight            [128, 128]                16384
+attention_layers.3.k_proj.bias                 [128]                  128
+attention_layers.3.v_proj.weight            [384, 128]                49152
+attention_layers.3.v_proj.bias                 [384]                  384
+attention_layers.3.o_proj.weight            [384, 128]                49152
+attention_layers.3.o_proj.bias                 [384]                  384
+attention_layers.3.vec_proj.weight            [384, 128]                49152
+attention_layers.3.dk_proj.weight             [128, 50]                 6400
+attention_layers.3.dk_proj.bias                 [128]                  128
+attention_layers.3.dv_proj.weight             [384, 50]                19200
+attention_layers.3.dv_proj.bias                 [384]                  384
+attention_layers.4.layernorm.weight                 [128]                  128
+attention_layers.4.layernorm.bias                 [128]                  128
+attention_layers.4.q_proj.weight            [128, 128]                16384
+attention_layers.4.q_proj.bias                 [128]                  128
+attention_layers.4.k_proj.weight            [128, 128]                16384
+attention_layers.4.k_proj.bias                 [128]                  128
+attention_layers.4.v_proj.weight            [384, 128]                49152
+attention_layers.4.v_proj.bias                 [384]                  384
+attention_layers.4.o_proj.weight            [384, 128]                49152
+attention_layers.4.o_proj.bias                 [384]                  384
+attention_layers.4.vec_proj.weight            [384, 128]                49152
+attention_layers.4.dk_proj.weight             [128, 50]                 6400
+attention_layers.4.dk_proj.bias                 [128]                  128
+attention_layers.4.dv_proj.weight             [384, 50]                19200
+attention_layers.4.dv_proj.bias                 [384]                  384
+attention_layers.5.layernorm.weight                 [128]                  128
+attention_layers.5.layernorm.bias                 [128]                  128
+attention_layers.5.q_proj.weight            [128, 128]                16384
+attention_layers.5.q_proj.bias                 [128]                  128
+attention_layers.5.k_proj.weight            [128, 128]                16384
+attention_layers.5.k_proj.bias                 [128]                  128
+attention_layers.5.v_proj.weight            [384, 128]                49152
+attention_layers.5.v_proj.bias                 [384]                  384
+attention_layers.5.o_proj.weight            [384, 128]                49152
+attention_layers.5.o_proj.bias                 [384]                  384
+attention_layers.5.vec_proj.weight            [384, 128]                49152
+attention_layers.5.dk_proj.weight             [128, 50]                 6400
+attention_layers.5.dk_proj.bias                 [128]                  128
+attention_layers.5.dv_proj.weight             [384, 50]                19200
+attention_layers.5.dv_proj.bias                 [384]                  384
+attention_layers.6.layernorm.weight                 [128]                  128
+attention_layers.6.layernorm.bias                 [128]                  128
+attention_layers.6.q_proj.weight            [128, 128]                16384
+attention_layers.6.q_proj.bias                 [128]                  128
+attention_layers.6.k_proj.weight            [128, 128]                16384
+attention_layers.6.k_proj.bias                 [128]                  128
+attention_layers.6.v_proj.weight            [384, 128]                49152
+attention_layers.6.v_proj.bias                 [384]                  384
+attention_layers.6.o_proj.weight            [384, 128]                49152
+attention_layers.6.o_proj.bias                 [384]                  384
+attention_layers.6.vec_proj.weight            [384, 128]                49152
+attention_layers.6.dk_proj.weight             [128, 50]                 6400
+attention_layers.6.dk_proj.bias                 [128]                  128
+attention_layers.6.dv_proj.weight             [384, 50]                19200
+attention_layers.6.dv_proj.bias                 [384]                  384
+attention_layers.7.layernorm.weight                 [128]                  128
+attention_layers.7.layernorm.bias                 [128]                  128
+attention_layers.7.q_proj.weight            [128, 128]                16384
+attention_layers.7.q_proj.bias                 [128]                  128
+attention_layers.7.k_proj.weight            [128, 128]                16384
+attention_layers.7.k_proj.bias                 [128]                  128
+attention_layers.7.v_proj.weight            [384, 128]                49152
+attention_layers.7.v_proj.bias                 [384]                  384
+attention_layers.7.o_proj.weight            [384, 128]                49152
+attention_layers.7.o_proj.bias                 [384]                  384
+attention_layers.7.vec_proj.weight            [384, 128]                49152
+attention_layers.7.dk_proj.weight             [128, 50]                 6400
+attention_layers.7.dk_proj.bias                 [128]                  128
+attention_layers.7.dv_proj.weight             [384, 50]                19200
+attention_layers.7.dv_proj.bias                 [384]                  384
+               out_norm.weight                 [128]                  128
+                 out_norm.bias                 [128]                  128
+        post_lin_list.0.weight             [64, 128]                 8192
+          post_lin_list.0.bias                  [64]                   64
+        post_lin_list.1.weight               [1, 64]                   64
+          post_lin_list.1.bias                   [1]                    1
+--------------------------------------------------------------------------
+Total params: 1734629
+Trainable params: 1734629
+Non-trainable params: 0
+Attempting to load checkpoint...
+Recent checkpoint loaded successfully.
+Settings: 
+{'dataset': {'additional_attributes': ['forces', 'stress'],
+             'data_format': 'json',
+             'dataset_device': 'cpu',
+             'name': 'MP_data_forces',
+             'num_workers': 0,
+             'prediction_level': 'graph',
+             'preprocess_params': {'all_neighbors': True,
+                                   'cutoff_radius': 8.0,
+                                   'edge_calc_method': 'ocp',
+                                   'edge_dim': 50,
+                                   'n_neighbors': 250,
+                                   'node_dim': 100,
+                                   'node_representation': 'onehot',
+                                   'num_offsets': 2,
+                                   'preprocess_edge_features': False,
+                                   'preprocess_edges': False,
+                                   'preprocess_node_features': True,
+                                   'self_loop': True},
+             'processed': True,
+             'pt_path': 'data/mp_data_forces/',
+             'src': '/global/cfs/projectdirs/m3641/Shared/Materials_datasets/MP_data_forces/raw/data.json',
+             'target_path': None,
+             'test_ratio': 0.0,
+             'train_ratio': 0.95,
+             'transforms': [{'args': {'index': -1},
+                             'name': 'GetY',
+                             'otf': True}],
+             'val_ratio': 0.05,
+             'verbose': True},
+ 'model': {'activation': 'silu',
+           'aggr': 'add',
+           'attn_activation': 'silu',
+           'dropout_rate': 0.0,
+           'gradient': True,
+           'hidden_channels': 128,
+           'model_ensemble': 1,
+           'name': 'torchmd_etEarly',
+           'num_heads': 8,
+           'num_layers': 8,
+           'num_post_layers': 1,
+           'num_rbf': 50,
+           'otf_edge_attr': True,
+           'otf_edge_index': True,
+           'otf_node_attr': False,
+           'pool': 'global_add_pool',
+           'pool_order': 'late',
+           'post_hidden_channels': 64,
+           'prediction_level': 'graph'},
+ 'optim': {'batch_size': 32,
+           'batch_tqdm': False,
+           'clip_grad_norm': 10,
+           'loss': {'loss_args': {'weight_energy': 0.01,
+                                  'weight_force': 50.0,
+                                  'weight_stress': 50.0},
+                    'loss_type': 'ForceStressLoss'},
+           'lr': 0.0001,
+           'max_checkpoint_epochs': 0,
+           'max_epochs': 400,
+           'optimizer': {'optimizer_args': {}, 'optimizer_type': 'AdamW'},
+           'scheduler': {'scheduler_args': {'factor': 0.8,
+                                            'min_lr': 1e-05,
+                                            'mode': 'min',
+                                            'patience': 10,
+                                            'threshold': 0.0002},
+                         'scheduler_type': 'ReduceLROnPlateau'},
+           'verbosity': 1},
+ 'submit': False,
+ 'task': {'checkpoint_path': 'results/07/torchmd-1/checkpoint_0/checkpoint.pt',
+          'continue_job': True,
+          'identifier': 'matstructpredict-torchmd-1',
+          'load_training_state': True,
+          'log_id': '2024-02-19-09-17-51-420',
+          'model_save_frequency': 1,
+          'output_frequency': 1,
+          'parallel': False,
+          'run_mode': 'train',
+          'save_dir': None,
+          'seed': 12345678,
+          'use_amp': True,
+          'write_output': ['val']},
+ 'trainer': 'property'}
+Starting regular training
+Running for 50 epochs on TorchMD_ET model
+Epoch: 0350, Learning Rate: 0.000013, Training Error: 1.73993, Val Error: 3.52478, Time per epoch (s): 1736.66857
+Epoch: 0351, Learning Rate: 0.000013, Training Error: 1.72660, Val Error: 3.53695, Time per epoch (s): 1710.32908
+Epoch: 0352, Learning Rate: 0.000013, Training Error: 1.71978, Val Error: 3.42278, Time per epoch (s): 1709.82106
+Epoch: 0353, Learning Rate: 0.000013, Training Error: 1.70806, Val Error: 3.45233, Time per epoch (s): 1710.69431
+Epoch: 0354, Learning Rate: 0.000013, Training Error: 1.70056, Val Error: 3.43732, Time per epoch (s): 1702.42756
+Epoch: 0355, Learning Rate: 0.000013, Training Error: 1.72563, Val Error: 3.49762, Time per epoch (s): 1703.08882
+Epoch: 0356, Learning Rate: 0.000013, Training Error: 1.72240, Val Error: 3.54705, Time per epoch (s): 1704.97740
+Epoch: 0357, Learning Rate: 0.000013, Training Error: 1.70962, Val Error: 3.53344, Time per epoch (s): 1701.93383
+Epoch: 0358, Learning Rate: 0.000013, Training Error: 1.72146, Val Error: 3.60205, Time per epoch (s): 1703.28296
+Epoch: 0359, Learning Rate: 0.000013, Training Error: 1.70811, Val Error: 3.50278, Time per epoch (s): 1702.88023
+Epoch: 0360, Learning Rate: 0.000013, Training Error: 1.71993, Val Error: 3.53909, Time per epoch (s): 1702.05055
+Epoch: 0361, Learning Rate: 0.000013, Training Error: 1.72284, Val Error: 3.46242, Time per epoch (s): 1701.68767
+Epoch: 0362, Learning Rate: 0.000013, Training Error: 1.69790, Val Error: 3.62462, Time per epoch (s): 1702.91819
+Epoch: 0363, Learning Rate: 0.000013, Training Error: 1.71100, Val Error: 3.42873, Time per epoch (s): 1698.85653
+Epoch: 0364, Learning Rate: 0.000013, Training Error: 1.71617, Val Error: 3.58105, Time per epoch (s): 1700.10029
+Epoch: 0365, Learning Rate: 0.000013, Training Error: 1.69220, Val Error: 3.42932, Time per epoch (s): 1699.06342
+Epoch: 0366, Learning Rate: 0.000013, Training Error: 1.72672, Val Error: 3.51033, Time per epoch (s): 1700.63004
+Epoch: 0367, Learning Rate: 0.000013, Training Error: 1.72313, Val Error: 3.47663, Time per epoch (s): 1700.37559
+Epoch: 0368, Learning Rate: 0.000013, Training Error: 1.70573, Val Error: 3.48726, Time per epoch (s): 1705.28127
+Epoch: 0369, Learning Rate: 0.000013, Training Error: 1.72256, Val Error: 3.57914, Time per epoch (s): 1697.85683
+Epoch: 0370, Learning Rate: 0.000013, Training Error: 1.70782, Val Error: 3.52811, Time per epoch (s): 1700.61895
+Epoch: 0371, Learning Rate: 0.000013, Training Error: 1.70057, Val Error: 3.60581, Time per epoch (s): 1699.64243
+Epoch: 0372, Learning Rate: 0.000013, Training Error: 1.69825, Val Error: 3.48879, Time per epoch (s): 1699.59427
+Epoch: 0373, Learning Rate: 0.000013, Training Error: 1.70242, Val Error: 3.42507, Time per epoch (s): 1702.36110
+Epoch: 0374, Learning Rate: 0.000013, Training Error: 1.70226, Val Error: 3.50021, Time per epoch (s): 1698.54404
+Epoch: 0375, Learning Rate: 0.000013, Training Error: 1.71368, Val Error: 3.46235, Time per epoch (s): 1695.99575
+Epoch: 0376, Learning Rate: 0.000013, Training Error: 1.70326, Val Error: 3.43249, Time per epoch (s): 1695.97752
+Epoch: 0377, Learning Rate: 0.000011, Training Error: 1.67642, Val Error: 3.41515, Time per epoch (s): 1700.84270
+Epoch: 0378, Learning Rate: 0.000011, Training Error: 1.67752, Val Error: 3.47230, Time per epoch (s): 1701.26443
+Epoch: 0379, Learning Rate: 0.000011, Training Error: 1.66163, Val Error: 3.38357, Time per epoch (s): 1701.07419
+Saving prediction results for epoch 380 to: /results/2024-02-19-09-17-55-750-matstructpredict-torchmd-1/train_results/
+Saved val error: 3.39295
+Epoch: 0380, Learning Rate: 0.000011, Training Error: 1.66164, Val Error: 3.56991, Time per epoch (s): 1699.09589
+Epoch: 0381, Learning Rate: 0.000011, Training Error: 1.67887, Val Error: 3.52994, Time per epoch (s): 1696.40505
+Epoch: 0382, Learning Rate: 0.000011, Training Error: 1.66874, Val Error: 3.49833, Time per epoch (s): 1697.40868
+Epoch: 0383, Learning Rate: 0.000011, Training Error: 1.65040, Val Error: 3.56308, Time per epoch (s): 1697.95426
+Epoch: 0384, Learning Rate: 0.000011, Training Error: 1.66639, Val Error: 3.45126, Time per epoch (s): 1701.02218
+Epoch: 0385, Learning Rate: 0.000011, Training Error: 1.65325, Val Error: 3.51266, Time per epoch (s): 1700.14843
+Epoch: 0386, Learning Rate: 0.000011, Training Error: 1.65994, Val Error: 3.48338, Time per epoch (s): 1706.03542
+Epoch: 0387, Learning Rate: 0.000011, Training Error: 1.67298, Val Error: 3.43806, Time per epoch (s): 1702.54963
+Epoch: 0388, Learning Rate: 0.000011, Training Error: 1.65763, Val Error: 3.36767, Time per epoch (s): 1699.34694
+Saving prediction results for epoch 389 to: /results/2024-02-19-09-17-55-750-matstructpredict-torchmd-1/train_results/
+Saved val error: 3.44156
+Epoch: 0389, Learning Rate: 0.000011, Training Error: 1.66504, Val Error: 3.48667, Time per epoch (s): 1701.00336
+Epoch: 0390, Learning Rate: 0.000011, Training Error: 1.66667, Val Error: 3.46744, Time per epoch (s): 1700.69231
+Epoch: 0391, Learning Rate: 0.000011, Training Error: 1.67112, Val Error: 3.38371, Time per epoch (s): 1696.64777
+Epoch: 0392, Learning Rate: 0.000011, Training Error: 1.65859, Val Error: 3.40115, Time per epoch (s): 1698.65180
+Epoch: 0393, Learning Rate: 0.000011, Training Error: 1.66631, Val Error: 3.51451, Time per epoch (s): 1699.64154
+Epoch: 0394, Learning Rate: 0.000011, Training Error: 1.64878, Val Error: 3.42464, Time per epoch (s): 1696.05411
+Epoch: 0395, Learning Rate: 0.000011, Training Error: 1.66433, Val Error: 3.47652, Time per epoch (s): 1697.26007
+Epoch: 0396, Learning Rate: 0.000011, Training Error: 1.65434, Val Error: 3.44465, Time per epoch (s): 1696.08172
+Epoch: 0397, Learning Rate: 0.000011, Training Error: 1.64889, Val Error: 3.50000, Time per epoch (s): 1697.51323
+Epoch: 0398, Learning Rate: 0.000011, Training Error: 1.64813, Val Error: 3.52176, Time per epoch (s): 1699.73823
+Epoch: 0399, Learning Rate: 0.000011, Training Error: 1.65700, Val Error: 3.40137, Time per epoch (s): 1698.76800
+Final Losses: 
+Saved val error: 3.40854

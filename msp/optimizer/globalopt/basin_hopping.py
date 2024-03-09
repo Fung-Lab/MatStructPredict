@@ -13,7 +13,7 @@ import torch
 
 class BasinHoppingBase(Optimizer):
     def __init__(self, name, hops=5, steps=100, optimizer="FIRE", dr=.5, max_atom_num=100, 
-                perturbs=['pos', 'cell', 'atomic_num', 'add', 'remove', 'swap'], **kwargs):
+                perturbs=['pos', 'cell', 'atomic_num', 'add', 'remove', 'swap'], elems_to_sample=None, **kwargs):
         """
         Initialize the basin hopping optimizer.
 
@@ -35,6 +35,13 @@ class BasinHoppingBase(Optimizer):
         perturbs_dict = {'pos': self.perturbPos, 'cell': self.perturbCell, 'atomic_num': self.perturbAtomicNum, 
                         'add': self.addAtom, 'remove': self.removeAtom, 'swap': self.swapAtom}
         self.perturbs = [perturbs_dict[perturb] for perturb in perturbs]
+        if elems_to_sample is None:
+            self.elems = [1, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 19, 20, 21, 22, 23, 24, 
+                          25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 
+                          48, 49, 50, 51, 52, 53, 55, 56, 57, 58, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 
+                          89, 90, 91, 92, 93, 94]
+        else:
+            self.elems = elems_to_sample
     
     def perturbPos(self, atoms, **kwargs):
         """
@@ -60,46 +67,78 @@ class BasinHoppingBase(Optimizer):
             atoms.set_cell(atoms.get_cell()[:] + disp)
         
 
-    def perturbAtomicNum(self, atoms, num_atoms_perturb=1, **kwargs):
+    def perturbAtomicNum(self, atoms, num_atoms_perturb=1, num_unique=4, **kwargs):
         """
         Perturbs the atomic numbers of the atoms in the structure
         """
         if isinstance(atoms, ExpCellFilter):
-            atoms_to_perturb = np.random.randint(len(atoms.atoms), size=num_atoms_perturb)
-            new_atoms = np.random.randint(1, self.max_atom_num, size=num_atoms_perturb)
-            atom_list = atoms.atoms.get_atomic_numbers()
-            atom_list[atoms_to_perturb] = new_atoms
-            atoms.atoms.set_atomic_numbers(atom_list)
+            un = np.unique(atoms.atoms.get_atomic_numbers())
+            if len(un) < num_unique:
+                atoms_to_perturb = np.random.randint(len(atoms.atoms), size=num_atoms_perturb)
+                new_atoms = np.random.choice(self.elems, size=num_atoms_perturb)
+                atom_list = atoms.atoms.get_atomic_numbers()
+                atom_list[atoms_to_perturb] = new_atoms
+                atoms.atoms.set_atomic_numbers(atom_list)
+            else:
+                atoms_to_perturb = np.random.randint(len(atoms.atoms), size=num_atoms_perturb)
+                new_atoms = np.random.choice(un, size=num_atoms_perturb)
+                atom_list = atoms.atoms.get_atomic_numbers()
+                atom_list[atoms_to_perturb] = new_atoms
+                atoms.atoms.set_atomic_numbers(atom_list)
         else:
-            atoms_to_perturb = np.random.randint(len(atoms), size=num_atoms_perturb)
-            new_atoms = np.random.randint(1, self.max_atom_num, size=num_atoms_perturb)
-            atom_list = atoms.get_atomic_numbers()
-            atom_list[atoms_to_perturb] = new_atoms
-            atoms.set_atomic_numbers(atom_list)
+            un = np.unique(atoms.get_atomic_numbers())
+            if len(un) < 4:
+                atoms_to_perturb = np.random.randint(len(atoms), size=num_atoms_perturb)
+                new_atoms = np.random.choice(self.elems, size=num_atoms_perturb)
+                atom_list = atoms.get_atomic_numbers()
+                atom_list[atoms_to_perturb] = new_atoms
+                atoms.set_atomic_numbers(atom_list)
+            else:
+                atoms_to_perturb = np.random.randint(len(atoms), size=num_atoms_perturb)
+                new_atoms = np.random.choice(un, size=num_atoms_perturb)
+                atom_list = atoms.get_atomic_numbers()
+                atom_list[atoms_to_perturb] = new_atoms
+                atoms.set_atomic_numbers(atom_list)
 
-    def addAtom(self, atoms, **kwargs):
+    def addAtom(self, atoms, num_unique=4, **kwargs):
         """
         Adds an atom to the structure
         """
         if isinstance(atoms, ExpCellFilter):
-            atoms.atoms.append(Atom(np.random.randint(1, self.max_atom_num), position=(0, 0, 0)))
-            pos = atoms.atoms.get_scaled_positions()
-            pos[-1] = np.random.uniform(0., 1., (1, 3))
-            atoms.atoms.set_scaled_positions(pos)
+            un = np.unique(atoms.atoms.get_atomic_numbers())
+            if len(un) < num_unique:
+                atoms.atoms.append(Atom(np.random.choice(self.elems, size=1)[0], position=(0, 0, 0)))
+                pos = atoms.atoms.get_scaled_positions()
+                pos[-1] = np.random.uniform(0., 1., (1, 3))
+                atoms.atoms.set_scaled_positions(pos)
+            else:
+                atoms.atoms.append(Atom(np.random.choice(un, size=1)[0], position=(0, 0, 0)))
+                pos = atoms.atoms.get_scaled_positions()
+                pos[-1] = np.random.uniform(0., 1., (1, 3))
+                atoms.atoms.set_scaled_positions(pos)
         else:
-            atoms.append(Atom(np.random.randint(1, self.max_atom_num), position=(0, 0, 0)))
-            pos = atoms.get_scaled_positions()
-            pos[-1] = np.random.uniform(0., 1., (1, 3))
-            atoms.set_scaled_positions(pos)
+            un = np.unique(atoms.get_atomic_numbers())
+            if len(un) < 4:
+                atoms.append(Atom(np.random.choice(self.elems, size=1)[0], position=(0, 0, 0)))
+                pos = atoms.get_scaled_positions()
+                pos[-1] = np.random.uniform(0., 1., (1, 3))
+                atoms.set_scaled_positions(pos)
+            else:
+                atoms.append(Atom(np.random.choice(un, size=1)[0], position=(0, 0, 0)))
+                pos = atoms.get_scaled_positions()
+                pos[-1] = np.random.uniform(0., 1., (1, 3))
+                atoms.set_scaled_positions(pos)
     
     def removeAtom(self, atoms, **kwargs):
         """
         Removes an atom from the structure
         """
         if isinstance(atoms, ExpCellFilter):
-            atoms.atoms.pop(np.random.randint(len(atoms.atoms)))
+            if len(atoms.atoms) > 2:
+                atoms.atoms.pop(np.random.randint(len(atoms.atoms)))
         else:
-            atoms.pop(np.random.randint(len(atoms)))
+            if len(atoms) > 2:
+                atoms.pop(np.random.randint(len(atoms)))
 
     def swapAtom(self, atoms, **kwargs):
         """
@@ -125,7 +164,7 @@ class BasinHoppingBase(Optimizer):
 class BasinHoppingASE(BasinHoppingBase):
 
     def __init__(self, forcefield, hops=5, steps=100, optimizer="FIRE", dr=.5, max_atom_num=100, 
-                perturbs=['pos', 'cell', 'atomic_num', 'add', 'remove', 'swap'], **kwargs):
+                perturbs=['pos', 'cell', 'atomic_num', 'add', 'remove', 'swap'], elems_to_sample=None, **kwargs):
         """
         Initialize the basinhoppingASE optimizer, which uses an ASE calculator to optimize structures one at a time.
 
@@ -139,10 +178,10 @@ class BasinHoppingASE(BasinHoppingBase):
             perturbs (list): list of perturbs to use. Defaults to all possible (pos, cell, atomic_num, add, remove, swap).
         """
 
-        super().__init__("BasinHoppingASE", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, perturbs=perturbs, **kwargs)
+        super().__init__("BasinHoppingASE", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, perturbs=perturbs, elems_to_sample=elems_to_sample, **kwargs)
         self.calculator = forcefield.create_ase_calc()
 
-    def predict(self, structures, cell_relax=True, topk=1, num_atoms_perturb=1, density=.2):
+    def predict(self, structures, cell_relax=True, topk=1, num_atoms_perturb=1, num_unique=4, density=.2):
         """
         Optimizes the list of compositions one at a time using the an ASE Calculator
 
@@ -191,7 +230,7 @@ class BasinHoppingASE(BasinHoppingBase):
                     temp = atom
                 res[-1].append({'hop': i, 'init_loss': old_energy, 'loss': optimized_energy, 'perturb': prev_perturb.__name__, 'composition': temp.get_atomic_numbers(), 'structure': atoms_to_dict([temp], [optimized_energy])[0]})
                 prev_perturb = self.perturbs[np.random.randint(len(self.perturbs))]
-                prev_perturb(atom, num_atoms_perturb=num_atoms_perturb)
+                prev_perturb(atom, num_atoms_perturb=num_atoms_perturb, num_unique=num_unique)
             print('Structure', index, 'Min energy', min_energy[index])
         min_atoms = atoms_to_dict(min_atoms, min_energy)
         return res, min_atoms
@@ -199,7 +238,7 @@ class BasinHoppingASE(BasinHoppingBase):
         
 class BasinHoppingBatch(BasinHoppingBase):
     def __init__(self, forcefield, hops=5, steps=100, optimizer="Adam", dr=.5, max_atom_num=100,
-                perturbs=['pos', 'cell', 'atomic_num', 'add', 'remove', 'swap'], **kwargs):
+                perturbs=['pos', 'cell', 'atomic_num', 'add', 'remove', 'swap'], elems_to_sample=None, **kwargs):
         """
         Initialize the basinhopping optimizer, which uses a forcefield to optimize batches
 
@@ -212,10 +251,10 @@ class BasinHoppingBatch(BasinHoppingBase):
             max_atom_num (int, optional): maximum atom number to be considered, exclusive. Defaults to 101.
             perturbs (list): list of perturbs to use. Defaults to all possible (pos, cell, atomic_num, add, remove, swap).
         """
-        super().__init__("BasinHopping", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, perturbs=perturbs, **kwargs)
+        super().__init__("BasinHopping", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, perturbs=perturbs, elems_to_sample=elems_to_sample, **kwargs)
         self.forcefield = forcefield
     
-    def predict(self, structures, objective_func, cell_relax=True, topk=1, batch_size=4, log_per=0, lr=.05, density=.2, num_atoms_perturb=1):
+    def predict(self, structures, objective_func, cell_relax=True, topk=1, batch_size=4, log_per=0, lr=.05, density=.2, num_atoms_perturb=1, num_unique=4):
         """
         Optimizes the list of compositions in batches 
 
@@ -233,9 +272,9 @@ class BasinHoppingBatch(BasinHoppingBase):
         Returns:
             list: A list of ase.Atoms objects representing the predicted minima
         """
-        atoms = dict_to_atoms(structures)
-        min_atoms = deepcopy(atoms)
-        min_loss = [1e10] * len(min_atoms)
+        new_atoms = dict_to_atoms(structures)
+        min_atoms = deepcopy(new_atoms)
+        min_objective_loss = [1e10] * len(min_atoms)
         best_hop = [0] * len(min_atoms)
         prev_perturb = [self.perturbPos] * len(min_atoms)
         res = []
@@ -243,29 +282,48 @@ class BasinHoppingBatch(BasinHoppingBase):
             res.append([])
         for i in range(self.hops):
             start_time = time()
-            newAtoms, new_loss, prev_loss = self.forcefield.optimize(atoms, self.steps, objective_func, log_per, lr, batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer)
+            new_atoms, obj_loss, energy_loss, novel_loss, soft_sphere_loss = self.forcefield.optimize(new_atoms, self.steps, objective_func, log_per, lr, batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer)
             end_time = time()
-            print('HOP', i, 'took', end_time - start_time, 'seconds')
-            for j in range(len(newAtoms)):
-                print('\tStructure', j)
-                print('\t\tHOP', i, 'previous energy', prev_loss[j])
-                print('\t\tHOP', i, 'optimized energy', new_loss[j])  
-                if new_loss[j] < min_loss[j]:
-                    min_loss[j] = new_loss[j]
-                    min_atoms[j] = newAtoms[j].copy()
+            for j in range(len(new_atoms)):
+                if obj_loss[j] < min_objective_loss[j]:
+                    min_objective_loss[j] = obj_loss[j]
+                    min_atoms[j] = new_atoms[j].copy()
                     best_hop[j] = i
-                res[j].append({'hop': i, 'init_loss': prev_loss[j][0], 'loss': new_loss[j][0], 'perturb': prev_perturb[j].__name__, 'composition': newAtoms[j].get_atomic_numbers(), 'structure': atoms_to_dict([newAtoms[j]], new_loss[j])[0]})
-            atoms = deepcopy(min_atoms)
+                if getattr(objective_func, 'normalize', False):
+                    res[j].append({'hop': i, 'objective_loss': obj_loss[j][0], 'energy_loss': energy_loss[j][0], 'novel_loss': novel_loss[j][0], 'soft_sphere_loss': soft_sphere_loss[j][0],
+                                'unnormalized_loss' : objective_func.norm_to_raw_loss(energy_loss[j][0], new_atoms[j].get_atomic_numbers()),
+                               'perturb': prev_perturb[j].__name__, 'composition': new_atoms[j].get_atomic_numbers(), 
+                               'structure': atoms_to_dict([new_atoms[j]], obj_loss[j])[0]})
+                else:
+                    res[j].append({'hop': i, 'objective_loss': obj_loss[j][0], 'energy_loss': energy_loss[j][0], 'novel_loss': novel_loss[j][0], 'soft_sphere_loss': soft_sphere_loss[j][0],
+                               'perturb': prev_perturb[j].__name__, 'composition': new_atoms[j].get_atomic_numbers(), 
+                               'structure': atoms_to_dict([new_atoms[j]], obj_loss[j])[0]})
+                print("\tStructure: ", j)
+                print("\t\tObjective loss: ", res[j][-1]['objective_loss'])
+                print("\t\tEnergy loss: ", res[j][-1]['energy_loss'])
+                if getattr(objective_func, 'normalize', False):
+                    print("\t\tUnnormalized energy loss: ", res[j][-1]['unnormalized_loss'])
+                print("\t\tNovel loss: ", res[j][-1]['novel_loss'])
+                print("\t\tSoft sphere loss: ", res[j][-1]['soft_sphere_loss'])
+                print("\t\tComposition: ", res[j][-1]['composition'])
+                print("\t\tperturb: ", res[j][-1]['perturb'])
             print('HOP', i, 'took', end_time - start_time, 'seconds')
-            for j in range(len(atoms)):
+            for j in range(len(new_atoms)):
                 rand_ind = np.random.randint(len(self.perturbs))
                 prev_perturb[j] = self.perturbs[rand_ind]
-                self.perturbs[rand_ind](atoms[j], num_atoms_perturb=num_atoms_perturb)
+                self.perturbs[rand_ind](new_atoms[j], num_atoms_perturb=num_atoms_perturb, num_unique=num_unique)
         avg_loss = 0
-        for j in range(len(newAtoms)):
-            print('Structure', j, 'min energy', min_loss[j], 'best_hop', best_hop[j])
-            avg_loss += min_loss[j]
-        print('Avg loss', avg_loss / len(newAtoms))
-        min_atoms = atoms_to_dict(min_atoms, min_loss)
-        return res, min_atoms
+        for j, hop in enumerate(best_hop):
+            print("Structure: ", j)
+            print('\tBest hop: ', hop)
+            print("\tObjective loss: ", res[j][hop]['objective_loss'])
+            print("\tEnergy loss: ", res[j][hop]['energy_loss'])
+            if getattr(objective_func, 'normalize', False):
+                print("\tUnnormalized energy loss: ", res[j][hop]['unnormalized_loss'])
+            print("\tNovel loss: ", res[j][hop]['novel_loss'])
+            print("\tSoft sphere loss: ", res[j][hop]['soft_sphere_loss'])
+            avg_loss += min_objective_loss[j]
+        print('Avg Objective Loss', avg_loss / len(new_atoms))
+        min_atoms = atoms_to_dict(min_atoms, min_objective_loss)
+        return res, min_atoms, best_hop
 

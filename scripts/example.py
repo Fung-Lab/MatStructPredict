@@ -2,7 +2,7 @@ from msp.dataset import download_dataset, load_dataset, combine_dataset, update_
 from msp.composition import generate_random_compositions, sample_random_composition
 from msp.forcefield import MDL_FF, MACE_FF, M3GNet_FF
 from msp.optimizer.globalopt.basin_hopping import BasinHoppingASE, BasinHoppingBatch
-from msp.utils.objectives import UpperConfidenceBound, Energy
+from msp.utils.objectives import EnergyAndUncertainty, Energy, Uncertainty, EmbeddingDistance
 from msp.structure.structure_util import dict_to_atoms, init_structure, atoms_to_dict
 from msp.validate import read_dft_config, setup_DFT, Validate
 import pickle as pkl
@@ -30,10 +30,11 @@ max_iterations=1
 #Initialize a forcefield class, reading in from config (we use MDL_FF but it can be a force field from another library)
 train_config = 'mdl_config.yml'
 forcefield = MDL_FF(train_config, my_dataset)
+embeddings = forcefield.get_embeddings(my_dataset, batch_size=64)
 
 predictor = BasinHoppingASE(forcefield, hops=5, steps=100, optimizer="FIRE", dr=0.5, perturbs=['pos'])
 
-predictor_batch = BasinHoppingBatch(forcefield, hops=5, steps=100, dr=0.6, optimizer='Adam', batch_size=32)
+predictor_batch = BasinHoppingBatch(forcefield, hops=100, steps=100, dr=0.6, optimizer='Adam', batch_size=30)
 
 # forcefield_mace = MACE_FF()
 # predictor_mace = BasinHoppingASE(forcefield_mace, hops=5, steps=100, optimizer="FIRE", dr=0.5)
@@ -52,8 +53,8 @@ for i in range(0, max_iterations):
     # compositions are a dictionary of {element:amount}
     # compositions = sample_random_composition(dataset=my_dataset, n=1)
     # or manually specify the list of lists:
-    compositions = [[22, 22, 22, 22, 22, 22, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8] for _ in range(2)]
-    initial_structures = [init_structure(c, pyxtal=True) for c in compositions]
+    compositions = [[22, 22, 22, 22, 22, 22, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8] for _ in range(10)]
+    initial_structures = [init_structure(c, pyxtal=False) for c in compositions]
     read_structure = ase.io.read("init.cif")
     # initial_structures=[atoms_to_dict([read_structure], loss=[None])]
 
@@ -61,32 +62,48 @@ for i in range(0, max_iterations):
 
     #forcefield itself is not an ase calculator, but can be used to return the MDLCalculator class
     #initialize the predictor class, this is the BasinHopping version which uses an ASE calculator, but we can have another version for batched search
-    total_list, minima_list = predictor.predict(initial_structures)
-    minima_list = dict_to_atoms(minima_list)
-    for j, minima in enumerate(minima_list):
-        filename = "iteration_"+str(i)+"_structure_"+str(j)+"_mdl.cif"
-        ase.io.write(filename, minima)
-    f = open('output.txt', 'w')
-    for i in range(len(total_list)):
-        f.write('Structure ' + str(i) + '\n')
-        for hop in total_list[i]:
-            f.write("\tHop: " +str(hop['hop'])+ '\n')
-            f.write("\t\tInit loss: " +str(hop['init_loss'])+ '\n')
-            f.write("\t\tFinal loss: " +str(hop['loss'])+ '\n')
-            f.write("\t\tComposition: " +str(hop['composition'])+ '\n')
-            f.write("\t\tperturb: " +str(hop['perturb'])+ '\n')
-    f.close()
+    # total_list, minima_list = predictor.predict(initial_structures)
+    # minima_list = dict_to_atoms(minima_list)
+    # for j, minima in enumerate(minima_list):
+    #     filename = "iteration_"+str(i)+"_structure_"+str(j)+"_mdl.cif"
+    #     ase.io.write(filename, minima)
+    # f = open('output.txt', 'w')
+    # for i in range(len(total_list)):
+    #     f.write('Structure ' + str(i) + '\n')
+    #     for hop in total_list[i]:
+    #         f.write("\tHop: " +str(hop['hop'])+ '\n')
+    #         f.write("\t\tInit loss: " +str(hop['init_loss'])+ '\n')
+    #         f.write("\t\tFinal loss: " +str(hop['loss'])+ '\n')
+    #         f.write("\t\tComposition: " +str(hop['composition'])+ '\n')
+    #         f.write("\t\tperturb: " +str(hop['perturb'])+ '\n')
+    # f.close()
 
     #---Optimizing a batch of structures with batch basin hopping---
     # alternatively if we dont use ASE, we can optimize in batch, and optimize over multiple objectives as well
     # we do this by first initializing our objective function, which is similar to the loss function class in matdeeplearn
     # objective_func = UpperConfidenceBound(c=0.1)
-    objective_func = Energy()
-    total_list_batch, minima_list_batch = predictor_batch.predict(initial_structures, objective_func, batch_size=32)
+    #objective_func = EnergyAndUncertainty(normalize=True, uncertainty_ratio=.5, ljr_ratio=100)
+    objective_func = EmbeddingDistance(embeddings, normalize=True, energy_ratio=1, ljr_ratio=1, ljr_scale=.7, embedding_ratio=.1)
+    total_list_batch, minima_list_batch, best_hop = predictor_batch.predict(initial_structures, objective_func, batch_size=32, log_per=5, lr=.05)
     minima_list_batch = dict_to_atoms(minima_list_batch)
     for j, minima in enumerate(minima_list_batch):
         filename = "iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
         ase.io.write(filename, minima)
+    f = open('output.txt', 'w')
+    for i in range(len(total_list_batch)):
+        f.write('Structure ' + str(i) + '\n')
+        f.write('\tbest_hop: ' + str(best_hop[j]) + '\n')
+        for hop in total_list_batch[i]:
+            f.write("\tHop: " +str(hop['hop'])+ '\n')
+            f.write("\t\tObjective loss: " +str(hop['objective_loss'])+ '\n')
+            f.write("\t\tEnergy loss: "+str(hop['energy_loss'])+'\n')
+            if getattr(objective_func, 'normalize', False):
+                f.write("\t\tUnnormalized energy loss: " +str(hop['unnormalized_loss'])+ '\n')
+            f.write("\t\tNovel loss: "+str(hop['novel_loss']) + '\n')
+            f.write("\t\tSoft sphere loss: "+ str(hop['soft_sphere_loss']) + '\n')
+            f.write("\t\tComposition: " +str(hop['composition'])+ '\n')
+            f.write("\t\tperturb: " +str(hop['perturb'])+ '\n')
+    f.close()
         
                   
     # total_list_mace, minima_list_mace = predictor_mace.predict(initial_structures)    

@@ -101,7 +101,7 @@ def atoms_to_data(atoms):
     data_list = [Data() for _ in range(n_structures)]
 
     for i, s in enumerate(atoms):
-        data = atoms[i]
+        data = s
 
         pos = torch.tensor(data.get_positions(), dtype=torch.float)
         cell = torch.tensor(np.array([data.cell[:]]), dtype=torch.float)
@@ -132,3 +132,4 @@ def data_to_atoms(batch):
         res.append(Atoms(batch.z[curr:curr+batch.n_atoms[i]].cpu().numpy(), cell=batch.cell[i].cpu().detach().numpy(), pbc=(True, True, True), positions=batch.pos[curr:curr+batch.n_atoms[i]].cpu().detach().numpy()))
         curr += batch.n_atoms[i]
     return res
+
