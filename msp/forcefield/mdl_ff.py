@@ -174,7 +174,7 @@ class MDL_FF(ForceField):
         return dataset
 
 
-    def _forward(self, batch_data):
+    def _forward(self, batch_data, embeddings=False):
         """
         Calls model directly
         Args:
@@ -187,23 +187,32 @@ class MDL_FF(ForceField):
             out_list.append(self.trainer.model[i](batch_data))
                         
         out_stack = torch.stack([o["output"] for o in out_list])
-        embed_stack = torch.stack([o["embedding"] for o in out_list])
+        if embeddings:
+            embed_stack = torch.stack([o["embedding"] for o in out_list])
         output = {}
         output["potential_energy"] = torch.mean(out_stack, dim=0)
         output["potential_energy_uncertainty"] = torch.std(out_stack, dim=0)
-        output['embeddings'] = embed_stack
+        if embeddings:
+            output['embeddings'] = embed_stack
         #output is a dict        
         return output
 
-    def _batched_forward(self, batch_data):
-        def fmodel(params, buffers, x):
-            output = functional_call(self.base_model, (params, buffers), (x,))
-            return output['output'], output['embedding']
-        out_stack, embed_stack = torch.vmap(fmodel, in_dims=(0, 0, None))(self.params, self.buffers, batch_data)
+    def _batched_forward(self, batch_data, embeddings = False):
+        if embeddings:
+            def fmodel(params, buffers, x):
+                output = functional_call(self.base_model, (params, buffers), (x,))
+                return output['output'], output['embedding']
+            out_stack, embed_stack = torch.vmap(fmodel, in_dims=(0, 0, None))(self.params, self.buffers, batch_data)
+        else:
+            def fmodel(params, buffers, x):
+                output = functional_call(self.base_model, (params, buffers), (x,))
+                return output['output']
+            out_stack = torch.vmap(fmodel, in_dims=(0, 0, None))(self.params, self.buffers, batch_data)
         output = {}
         output["potential_energy"] = torch.mean(out_stack, dim=0)
         output["potential_energy_uncertainty"] = torch.std(out_stack, dim=0)
-        output['embeddings'] = embed_stack
+        if embeddings:
+            output['embeddings'] = embed_stack
         #output is a dict
         return output
     
@@ -223,7 +232,7 @@ class MDL_FF(ForceField):
         with torch.no_grad():
             for i in range(len(loader_iter)):
                 batch = next(loader_iter).to(device)
-                embeddings.append(self._batched_forward(batch)['embeddings'])
+                embeddings.append(self._batched_forward(batch, embeddings=True)['embeddings'])
                 if (i*len(batch)) > temp + 1000:
                     print('Structures', temp + 1, 'to', i*len(batch), 'took', time.time() - start_time)
                     temp = i * len(batch)
@@ -277,6 +286,7 @@ class MDL_FF(ForceField):
         energy_loss = []
         novel_loss = []
         soft_sphere_loss = []
+        embed = hasattr(objective_func, 'embeddings')
         
         print("device:", device)                       
         for i in range(len(loader_iter)):
@@ -301,7 +311,7 @@ class MDL_FF(ForceField):
             step = [0]
             def closure(step, temp_obj, temp_energy, temp_novel, temp_soft_sphere, batch):
                 opt.zero_grad()
-                output = self._batched_forward(batch)
+                output = self._batched_forward(batch, embeddings=embed)
                 objective_loss, energy_loss, novel_loss, soft_sphere_loss = objective_func(output, batch)
                 objective_loss.mean().backward(retain_graph=True)
                 
