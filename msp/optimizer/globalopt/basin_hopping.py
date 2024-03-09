@@ -295,12 +295,12 @@ class BasinHoppingBatch(BasinHoppingBase):
         best_hop = [0] * len(min_atoms)
         prev_perturb = [self.perturbPos] * len(min_atoms)
 
-        accepts = [[] for _ in range(len(atoms))]
-        accept_rate = [[] for _ in range(len(atoms))]
-        temps = [[] for _ in range(len(atoms))]
-        energies = [[] for _ in range(len(atoms))]
+        accepts = [[] for _ in range(len(new_atoms))]
+        accept_rate = [[] for _ in range(len(new_atoms))]
+        temps = [[] for _ in range(len(new_atoms))]
+        energies = [[] for _ in range(len(new_atoms))]
         step_sizes = []
-        temp = [0.0001 for _ in range(len(atoms))]
+        temp = [0.0001 for _ in range(len(new_atoms))]
 
         prev_step_loss = [1e10] * len(min_atoms)
 
@@ -311,10 +311,10 @@ class BasinHoppingBatch(BasinHoppingBase):
             start_time = time()
             new_atoms, obj_loss, energy_loss, novel_loss, soft_sphere_loss = self.forcefield.optimize(new_atoms, self.steps, objective_func, log_per, lr, batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer)
             self.change_dr(accepts[0], rate=0.1)
-            if len(accepts[j]) % 10 == 0:
-                step_sizes.append(self.dr)
             end_time = time()
             for j in range(len(new_atoms)):
+                if len(accepts[j]) % 10 == 0:
+                    step_sizes.append(self.dr)
                 temp[j] = self.change_temp(temp[j], accepts[j], rate=0.1)
                 accept = self.accept(prev_step_loss[j], obj_loss[j], temp[j])
                 print("Accept:", accept)
