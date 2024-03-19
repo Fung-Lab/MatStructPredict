@@ -34,7 +34,7 @@ embeddings = forcefield.get_embeddings(my_dataset, batch_size=64, cluster=False)
 
 #predictor = BasinHoppingASE(forcefield, hops=5, steps=100, optimizer="FIRE", dr=0.5)
 
-predictor_batch = BasinHoppingBatch(forcefield, hops=1, steps=100, dr=0.6, optimizer='Adam', batch_size=30)
+predictor_batch = BasinHoppingBatch(forcefield, hops=10, steps=100, dr=0.6, optimizer='Adam', batch_size=30)
 
 
 # forcefield_mace = MACE_FF()
