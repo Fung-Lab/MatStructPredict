@@ -2,6 +2,8 @@ import numpy as np
 from ase import Atoms
 import torch
 from torch_geometric.data import Data
+from ase.data import chemical_symbols
+
 
 
 def init_structure(composition, pyxtal=False, density=.2):
@@ -36,11 +38,14 @@ def init_structure(composition, pyxtal=False, density=.2):
     else:
         from pyxtal import pyxtal
         struc = pyxtal()
+        unique_nums = list(set(composition))
+        counts = [composition.count(num) for num in unique_nums]
+        symbols = [chemical_symbols[num] for num in unique_nums]
         while(True):
             try:
                 num = np.random.randint(1, 231)
-                print('testing', num)
-                struc.from_random(3, num, ['Ti', 'O'], [6, 12])
+                print('Testing', num)
+                struc.from_random(3, num, symbols, counts)
                 break
             except:
                 print('Didnt work')

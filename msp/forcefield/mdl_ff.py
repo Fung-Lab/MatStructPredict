@@ -21,6 +21,9 @@ from matdeeplearn.trainers.base_trainer import BaseTrainer
 from matdeeplearn.trainers.property_trainer import PropertyTrainer
 from matdeeplearn.common.data import dataset_split
 from msp.structure.structure_util import atoms_to_data, data_to_atoms
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+import os
 
 
 class MDL_FF(ForceField):
@@ -217,7 +220,7 @@ class MDL_FF(ForceField):
         #output is a dict
         return output
     
-    def get_embeddings(self, dataset, batch_size):
+    def get_embeddings(self, dataset, batch_size, cluster=False, num_clusters=5000):
         data_list = self.dataset['full']
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         for i in range(len(self.trainer.model)):
@@ -240,7 +243,20 @@ class MDL_FF(ForceField):
                     start_time = time.time()
         for i in range(len(self.trainer.model)):
             self.trainer.model[i].gradient = True
-        return torch.cat(embeddings, dim=1)
+        embeddings = torch.cat(embeddings, dim=1)
+        if cluster:
+            kmeans = KMeans(n_clusters=num_clusters)
+            res = []
+            silhouette_avg = 0
+            for i in range(len(self.trainer.model)):
+                start_time = time.time()
+                cluster_labels = kmeans.fit_predict(embeddings[i].cpu().detach().numpy())
+                res.append(kmeans.cluster_centers_)
+                silhouette_avg += silhouette_score(embeddings[i].cpu().detach().numpy(), res[i])
+                print('Model', i, 'clustering took', time.time() - start_time)
+            embeddings = torch.tensor(res)
+            print(f"New embeddings are {embeddings.size()} with a silhouette score of {silhouette_avg/len(self.trainer.model)}")
+        return embeddings
 
 
         
