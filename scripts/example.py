@@ -34,7 +34,7 @@ embeddings = forcefield.get_embeddings(my_dataset, batch_size=64, cluster=False)
 
 #predictor = BasinHoppingASE(forcefield, hops=5, steps=100, optimizer="FIRE", dr=0.5)
 
-predictor_batch = BasinHoppingBatch(forcefield, hops=10, steps=100, dr=0.6, optimizer='Adam', batch_size=30)
+predictor_batch = BasinHoppingBatch(forcefield, hops=20, steps=100, dr=0.6, optimizer='Adam', batch_size=30, perturbs=['pos', 'cell'])
 
 
 # forcefield_mace = MACE_FF()
@@ -54,7 +54,10 @@ for i in range(0, max_iterations):
     # compositions are a dictionary of {element:amount}
     # compositions = sample_random_composition(dataset=my_dataset, n=1)
     # or manually specify the list of lists:
-    compositions = [[22, 22, 22, 22, 22, 22, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8] for _ in range(8)]
+    # compositions = [[22, 22, 22, 22, 22, 22, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8] for _ in range(8)]
+    compositions = generate_random_compositions(my_dataset, n=8, max_elements=5, max_atoms=20)
+    for comp in compositions:
+        print(comp)
     initial_structures = [init_structure(c, pyxtal=True) for c in compositions]
     read_structure = ase.io.read("init.cif")
     # initial_structures=[atoms_to_dict([read_structure], loss=[None])]
