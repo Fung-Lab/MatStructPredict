@@ -45,7 +45,7 @@ class Energy(torch.nn.Module):
                                 -7.41385825, -9.51466466, -11.29141001, -12.94777968125, -14.26783833, -10000, -10000, -10000, -10000, -10000, -10000]
 
     def set_norm_offset(self, z, n_atoms):
-        self.offset = [0]*len(n_atoms)
+        self.offset = torch.zeros((len(n_atoms), 1)).to(z.device)
         curr = 0
         self.lj_rmins = torch.tensor(self.lj_rmins).to(z.device)
         for i in range(len(n_atoms)):
@@ -66,8 +66,9 @@ class Energy(torch.nn.Module):
 
     def forward(self, model_output, batch):
         if self.normalize:
-            for i in range(len(model_output['potential_energy'])):
-                model_output['potential_energy'][i] = (model_output['potential_energy'][i] + self.offset[i]) / batch.n_atoms[i]
+            model_output['potential_energy'] = (model_output['potential_energy'] + self.offset) / batch.n_atoms.unsqueeze(1)
+            # for i in range(len(batch.n_atoms)):
+            #     model_output['potential_energy'][i] = (model_output['potential_energy'][i] + self.offset[i]) / batch.n_atoms[i]
         ljr = self.lj_repulsion(batch, power=self.ljr_power)
         return self.energy_ratio * model_output["potential_energy"] + self.ljr_ratio * ljr, model_output["potential_energy"], torch.zeros(len(model_output['potential_energy']), 1).to(ljr.device), ljr
     
@@ -122,11 +123,11 @@ class EnergyAndUncertainty(torch.nn.Module):
 
                 
     def set_norm_offset(self, z, n_atoms):
-        self.offset = [0]*len(n_atoms)
+        self.offset = torch.zeros((len(n_atoms), 1)).to(z.device)
         curr = 0
         self.lj_rmins = torch.tensor(self.lj_rmins).to(z.device)
         for i in range(len(n_atoms)):
-            temp = z[curr:curr+n_atoms[i]]
+            temp = z[curr:curr+n_atoms[i]].long()
             for j in temp:
                 self.offset[i] -= self.element_energy[j]
             curr += n_atoms[i]
@@ -150,8 +151,9 @@ class EnergyAndUncertainty(torch.nn.Module):
     
     def forward(self, model_output, batch):
         if self.normalize:
-            for i in range(len(batch.n_atoms)):
-                model_output['potential_energy'][i] = (model_output['potential_energy'][i] + self.offset[i]) / batch.n_atoms[i]
+            model_output['potential_energy'] = (model_output['potential_energy'] + self.offset) / batch.n_atoms.unsqueeze(1)
+            # for i in range(len(batch.n_atoms)):
+            #     model_output['potential_energy'][i] = (model_output['potential_energy'][i] + self.offset[i]) / batch.n_atoms[i]
         ljr = self.lj_repulsion(batch, power=self.ljr_power)
         return self.energy_ratio * model_output["potential_energy"] - self.uncertainty_ratio * model_output["potential_energy_uncertainty"] + self.ljr_ratio * ljr, model_output["potential_energy"], -model_output["potential_energy_uncertainty"], ljr
 
@@ -191,11 +193,12 @@ class EmbeddingDistance(torch.nn.Module):
 
                 
     def set_norm_offset(self, z, n_atoms):
-        self.offset = [0]*len(n_atoms)
+        self.offset = torch.zeros((len(n_atoms), 1)).to(z.device)
+        self.embeddings = self.embeddings.to(z.device)
         curr = 0
         self.lj_rmins = torch.tensor(self.lj_rmins).to(z.device)
         for i in range(len(n_atoms)):
-            temp = z[curr:curr+n_atoms[i]]
+            temp = z[curr:curr+n_atoms[i]].long()
             for j in temp:
                 self.offset[i] -= self.element_energy[j]
             curr += n_atoms[i]
@@ -219,8 +222,9 @@ class EmbeddingDistance(torch.nn.Module):
     
     def forward(self, model_output, batch):
         if self.normalize:
-            for i in range(len(batch.n_atoms)):
-                model_output['potential_energy'][i] = (model_output['potential_energy'][i] + self.offset[i]) / batch.n_atoms[i]
+            model_output['potential_energy'] = (model_output['potential_energy'] + self.offset) / batch.n_atoms.unsqueeze(1)
+            # for i in range(len(batch.n_atoms)):
+            #     model_output['potential_energy'][i] = (model_output['potential_energy'][i] + self.offset[i]) / batch.n_atoms[i]
         ljr = self.lj_repulsion(batch, power=self.ljr_power)
         embedding_loss = torch.cdist(model_output['embeddings'], self.embeddings, p=2)
         if self.mode == 'min':

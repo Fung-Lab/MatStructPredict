@@ -353,13 +353,24 @@ class BasinHoppingBatch(BasinHoppingBase):
                 print("\t\tSoft sphere loss: ", res[j][-1]['soft_sphere_loss'])
                 print("\t\tComposition: ", res[j][-1]['composition'])
                 print("\t\tperturb: ", res[j][-1]['perturb'])
-
             print('HOP', i, 'took', end_time - start_time, 'seconds')
             for j in range(len(new_atoms)):
                 rand_ind = np.random.randint(len(self.perturbs))
                 prev_perturb[j] = self.perturbs[rand_ind]
                 self.perturbs[rand_ind](new_atoms[j], num_atoms_perturb=num_atoms_perturb, num_unique=num_unique)
+        print('Final optimization')
+        best_atoms, obj_loss, energy_loss, novel_loss, soft_sphere_loss = self.forcefield.optimize(best_atoms, 300, objective_func, log_per, lr, batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer)
         avg_loss = 0
+        for j, hop in enumerate(best_hop):
+            if getattr(objective_func, 'normalize', False):
+                res[j][hop] = {'hop': i, 'objective_loss': obj_loss[j][0], 'energy_loss': energy_loss[j][0], 'novel_loss': novel_loss[j][0], 'soft_sphere_loss': soft_sphere_loss[j][0],
+                            'unnormalized_loss' : objective_func.norm_to_raw_loss(energy_loss[j][0], new_atoms[j].get_atomic_numbers()),
+                            'perturb': prev_perturb[j].__name__, 'composition': new_atoms[j].get_atomic_numbers(), 
+                            'structure': atoms_to_dict([new_atoms[j]], obj_loss[j])[0]}
+            else:
+                res[j][hop].append({'hop': i, 'objective_loss': obj_loss[j][0], 'energy_loss': energy_loss[j][0], 'novel_loss': novel_loss[j][0], 'soft_sphere_loss': soft_sphere_loss[j][0],
+                            'perturb': prev_perturb[j].__name__, 'composition': new_atoms[j].get_atomic_numbers(), 
+                            'structure': atoms_to_dict([new_atoms[j]], obj_loss[j])[0]})
         for j, hop in enumerate(best_hop):
             print("Structure: ", j)
             print('\tBest hop: ', hop)
@@ -371,6 +382,7 @@ class BasinHoppingBatch(BasinHoppingBase):
             print("\tSoft sphere loss: ", res[j][hop]['soft_sphere_loss'])
             avg_loss += best_loss[j]
         print('Avg Objective Loss', avg_loss / len(new_atoms))
+        
         min_atoms = atoms_to_dict(best_atoms, min_objective_loss)
         return res, min_atoms, best_hop, energies, accepts, accept_rate, temps, step_sizes
 

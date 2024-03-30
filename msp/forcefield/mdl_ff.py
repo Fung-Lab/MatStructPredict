@@ -21,8 +21,9 @@ from matdeeplearn.trainers.base_trainer import BaseTrainer
 from matdeeplearn.trainers.property_trainer import PropertyTrainer
 from matdeeplearn.common.data import dataset_split
 from msp.structure.structure_util import atoms_to_data, data_to_atoms
-from sklearn.cluster import KMeans
+from sklearn.cluster import MiniBatchKMeans
 from sklearn.metrics import silhouette_score
+from torch_scatter import scatter_mean
 import os
 
 
@@ -163,11 +164,16 @@ class MDL_FF(ForceField):
                 data.structure_id = [str(i)]
             data.structure_id = [struc['structure_id']]
             data.z = torch.LongTensor(struc['atomic_numbers'])
-            data.forces = torch.tensor(struc['forces'])
-            data.stress = torch.tensor(struc['stress'])
+            if 'forces' in struc:
+                data.forces = torch.tensor(struc['forces'])
+            if 'stress' in struc:
+                data.stress = torch.tensor(struc['stress'])
             #optional
             data.u = torch.tensor(np.zeros((3))[np.newaxis, ...]).float()
-            data.y = torch.tensor(np.array([struc['potential_energy']])).float()
+            if 'potential_energy' in struc:
+                data.y = torch.tensor(np.array([struc['potential_energy']])).float()
+            if 'y' in struc:
+                data.y = torch.tensor([struc['y']]).float()
             if data.y.dim() == 1:
                 data.y = data.y.unsqueeze(0)
             #if forces:
@@ -220,7 +226,7 @@ class MDL_FF(ForceField):
         #output is a dict
         return output
     
-    def get_embeddings(self, dataset, batch_size, cluster=False, num_clusters=5000):
+    def get_embeddings(self, dataset, batch_size, cluster=False, num_clusters=20000):
         data_list = self.dataset['full']
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         for i in range(len(self.trainer.model)):
@@ -245,17 +251,16 @@ class MDL_FF(ForceField):
             self.trainer.model[i].gradient = True
         embeddings = torch.cat(embeddings, dim=1)
         if cluster:
-            kmeans = KMeans(n_clusters=num_clusters)
             res = []
-            silhouette_avg = 0
             for i in range(len(self.trainer.model)):
+                clust = MiniBatchKMeans(init="k-means++", n_clusters=5000, batch_size=2048)
                 start_time = time.time()
-                cluster_labels = kmeans.fit_predict(embeddings[i].cpu().detach().numpy())
-                res.append(kmeans.cluster_centers_)
-                silhouette_avg += silhouette_score(embeddings[i].cpu().detach().numpy(), res[i])
+                cluster_labels = clust.fit_predict(embeddings[i].cpu().detach().numpy())
                 print('Model', i, 'clustering took', time.time() - start_time)
+                res.append(clust.cluster_centers_)
             embeddings = torch.tensor(res)
-            print(f"New embeddings are {embeddings.size()} with a silhouette score of {silhouette_avg/len(self.trainer.model)}")
+            print(embeddings.size())
+            print(f"New embeddings are {embeddings.size()}")
         return embeddings
 
 
@@ -308,6 +313,7 @@ class MDL_FF(ForceField):
         print("device:", device)                       
         for i in range(len(loader_iter)):
             batch = next(loader_iter).to(device)
+            print(batch)
             if getattr(objective_func, 'normalize', False):
                 objective_func.set_norm_offset(batch.z, batch.n_atoms)
             pos, cell = batch.pos, batch.cell
