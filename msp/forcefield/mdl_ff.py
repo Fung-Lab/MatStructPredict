@@ -140,11 +140,11 @@ class MDL_FF(ForceField):
             
     def process_data(self, dataset):
         """
-        Process data for the force field model.
+        Process data for the force field model by turning it from a list of dicts to list of Data objects.
         Args:
-            dataset (dict): A dictionary of the dataset.
+            dataset (dict): A list of dictionaries representing structures.
         Returns:
-            dict: A dictionary of the processed dataset.
+            dict: A list of Data objects.
         """
         #add tqdm
         new_data_list = [Data() for _ in range(len(dataset))]
@@ -152,12 +152,9 @@ class MDL_FF(ForceField):
             data = new_data_list[i]
             data.n_atoms = len(struc['atomic_numbers'])
             data.pos = torch.tensor(struc['positions'])
-            #check cell dimensions
-            #data.cell = torch.tensor([struc['cell']])
             data.cell = torch.tensor(np.array(struc['cell']), dtype=torch.float).view(1, 3, 3)
             if (np.array(data.cell) == np.array([[0.0, 0.0, 0.0],[0.0, 0.0, 0.0],[0.0, 0.0, 0.0]])).all():
                 data.cell = torch.zeros((3,3)).unsqueeze(0)
-            #structure id optional or null
             if 'structure_id' in struc:
                 data.structure_id = [struc['structure_id']]
             else:
@@ -176,10 +173,6 @@ class MDL_FF(ForceField):
                 data.y = torch.tensor([struc['y']]).float()
             if data.y.dim() == 1:
                 data.y = data.y.unsqueeze(0)
-            #if forces:
-            #    data.forces = torch.tensor(struc['forces'])
-            #    if 'stress' in struc:
-            #        data.stress = torch.tensor(struc['stress']) 
         dataset = {"full": new_data_list}
         return dataset
 
@@ -189,6 +182,8 @@ class MDL_FF(ForceField):
         Calls model directly
         Args:
             batch_data (torch_geometric.data.Data): A batch of data.
+            embeddings (bool): Whether to return embeddings. Defaults to False.
+
         Returns:
             dict: A dictionary of the model output.
         """    
@@ -208,6 +203,15 @@ class MDL_FF(ForceField):
         return output
 
     def _batched_forward(self, batch_data, embeddings = False):
+        """
+        Calls model in parallel using torch.vmap
+        Args:
+            batch_data (torch_geometric.data.Data): A batch of data.
+            embeddings (bool): Whether to return embeddings. Defaults to False.
+
+        Returns:
+            dict: A dictionary of the model output.
+        """
         if embeddings:
             def fmodel(params, buffers, x):
                 output = functional_call(self.base_model, (params, buffers), (x,))
@@ -226,7 +230,18 @@ class MDL_FF(ForceField):
         #output is a dict
         return output
     
-    def get_embeddings(self, dataset, batch_size, cluster=False, num_clusters=20000):
+    def get_embeddings(self, dataset, batch_size, cluster=False, num_clusters=5000):
+        """
+        Get embeddings from the model for the dataset.
+        Args:
+            dataset (dict): A dictionary of the dataset.
+            batch_size (int): The batch size for the model.
+            cluster (bool): Whether to cluster the embeddings. Defaults to False.
+            num_clusters (int): The number of clusters to use. Defaults to 5000.
+        
+        Returns:
+            torch.tensor: The embeddings from the model.
+        """
         data_list = self.dataset['full']
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         for i in range(len(self.trainer.model)):
@@ -288,10 +303,13 @@ class MDL_FF(ForceField):
             device (str): The device to use for optimization. Defaults to 'cpu'.
             cell_relax (bool): Whether to relax the cell. Defaults to True.
             optim (str): The optimizer to use. Defaults to 'Adam'.
+
         Returns:
             res_atoms (list): A list of optimized ASE atoms objects.
-            res_energy (list): A list of the energies of the optimized structures.
-            old_energy (list): A list of the energies of the initial structures.
+            obj_loss (list): A list of objective function losses for each structure.
+            energy_loss (list): A list of energy losses for each structure.
+            novel_loss (list): A list of novelty losses for each structure
+            soft_sphere_loss (list): A list of soft sphere losses for each structure.
         """
         data_list = atoms_to_data(atoms)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -313,18 +331,14 @@ class MDL_FF(ForceField):
         print("device:", device)                       
         for i in range(len(loader_iter)):
             batch = next(loader_iter).to(device)
-            print(batch)
             if getattr(objective_func, 'normalize', False):
                 objective_func.set_norm_offset(batch.z, batch.n_atoms)
             pos, cell = batch.pos, batch.cell
-            # batch.z = batch.z.type(torch.float32)
-            # optimized_z = batch.z
 
             opt = getattr(torch.optim, optim, 'Adam')([pos, cell], lr=learning_rate)
             lr_scheduler = ReduceLROnPlateau(opt, 'min', factor=0.8, patience=10)
 
             pos.requires_grad_(True)
-            # optimized_z.requires_grad_(True)
             if cell_relax:
                 cell.requires_grad_(True)
 
@@ -341,7 +355,6 @@ class MDL_FF(ForceField):
                 
                 curr_time = time.time() - start_time
                 if log_per > 0 and step[0] % log_per == 0:                
-                    #print("{}  {0:4d}   {1: 3.6f}".format(output, step[0], loss.mean().item()))  
                     if cell_relax:    
                         print("Structure ID: {}, Step: {}, LJR Loss: {:.6f}, Pos Gradient: {:.6f}, Cell Gradient: {:.6f}, Time: {:.6f}".format(len(batch.structure_id), 
                         step[0], objective_loss.mean().item(), pos.grad.abs().mean().item(), cell.grad.abs().mean().item(), curr_time))
@@ -361,9 +374,7 @@ class MDL_FF(ForceField):
                 old_step = step[0]
                 loss = opt.step(lambda: closure(step, temp_obj, temp_energy, temp_novel, temp_soft_sphere, batch))
                 lr_scheduler.step(loss)
-                # print('optimizer step time', time.time()-start_time)
-                # print('steps taken', step[0] - old_step)
-            #print("learning rate: ", opt.param_groups[0]['lr'])
+
             res_atoms.extend(data_to_atoms(batch))
             obj_loss.extend(temp_obj[0].cpu().detach().numpy())
             energy_loss.extend(temp_energy[0].cpu().detach().numpy())
@@ -385,12 +396,14 @@ class MDL_FF(ForceField):
             optim
             scheduler
             dataset
+        
         Args:
             config (dict): A dictionary of the configuration.
             dataset (dict): A dictionary of the dataset.
             max_epochs (int): The maximum number of epochs to train the model. Defaults to value in the training configuration file.
             lr (float): The learning rate for the model. Defaults to value in the training configuration file.
             batch_size (int): The batch size for the model. Defaults to value in the training configuration file.
+        
         Returns:
             PropertyTrainer: A property trainer object.
         """

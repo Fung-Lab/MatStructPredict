@@ -3,7 +3,7 @@ from msp.dataset import download_dataset, load_dataset, combine_dataset, update_
 from msp.composition import generate_random_compositions, sample_random_composition
 from msp.forcefield import MDL_FF, MACE_FF, M3GNet_FF
 from msp.optimizer.globalopt.basin_hopping import BasinHoppingASE, BasinHoppingBatch
-from msp.utils.objectives import EnergyAndUncertainty, Energy, Uncertainty, EmbeddingDistance
+from msp.utils.objectives import EnergyAndUncertainty, Energy, EmbeddingDistance
 from msp.structure.structure_util import dict_to_atoms, init_structure, atoms_to_dict
 from msp.validate import read_dft_config, setup_DFT, Validate
 import pickle as pkl
@@ -31,7 +31,7 @@ max_iterations=1
 #Initialize a forcefield class, reading in from config (we use MDL_FF but it can be a force field from another library)
 train_config = 'mdl_config.yml'
 forcefield = MDL_FF(train_config, my_dataset)
-embeddings = forcefield.get_embeddings(my_dataset, batch_size=40, cluster=True)
+embeddings = forcefield.get_embeddings(my_dataset, batch_size=40, cluster=False)
 
 #predictor = BasinHoppingASE(forcefield, hops=5, steps=100, optimizer="FIRE", dr=0.5)
 
@@ -87,12 +87,12 @@ for i in range(0, max_iterations):
     # we do this by first initializing our objective function, which is similar to the loss function class in matdeeplearn
     # objective_func = Energy(normalize=True, ljr_ratio=1)
     objective_func = EmbeddingDistance(embeddings, normalize=True, energy_ratio=1, ljr_ratio=1, ljr_scale=.7, embedding_ratio=.1)
-    # objective_func = EnergyAndUncertainty(normalize=True, uncertainty_ratio=.5, ljr_ratio=1, ljr_scale=.7)
+    # objective_func = EnergyAndUncertainty(normalize=True, uncertainty_ratio=.25, ljr_ratio=1, ljr_scale=.7)
     start_time = time.time()
     total_list_batch, minima_list_batch, best_hop, energies, accepts, accept_rate, temps, step_sizes = predictor_batch.predict(initial_structures, objective_func, batch_size=8, log_per=5, lr=.05)
     minima_list_batch = dict_to_atoms(minima_list_batch)
     for j, minima in enumerate(minima_list_batch):
-        filename = "clustering_predicted/iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
+        filename = "attempt2_no_clustering/iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
         ase.io.write(filename, minima)
     f = open('output.txt', 'w')
     for i in range(len(total_list_batch)):

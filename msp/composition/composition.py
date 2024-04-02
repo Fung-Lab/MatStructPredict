@@ -45,6 +45,7 @@ def generate_random_compositions(dataset, n=5, max_elements=5, max_atoms=20, ele
         n (int): number of compositions to generate
         max_elements (int): maximum number of elements in composition
         max_atoms (int): maximum number of atoms per element
+        elems_to_sample (list): list of elements to sample from
     
     Returns:
         compositions (list): list of compositions
@@ -99,6 +100,15 @@ def generate_random_compositions(dataset, n=5, max_elements=5, max_atoms=20, ele
     return compositions
 
 def sample_random_composition(dataset, n=5):
+    """
+    Sample n random compositions from the dataset
+    Args:
+        dataset (dict): dictionary of dataset
+        n (int): number of compositions to sample
+
+    Returns:
+        dataset_comps (list): list of compositions
+    """
     dataset_comps = []
     for data in dataset:
         data['atomic_numbers'].sort()

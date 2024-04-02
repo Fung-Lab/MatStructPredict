@@ -24,6 +24,8 @@ class BasinHoppingBase(Optimizer):
             optimizer (str, optional): Optimizer to use for each step. Defaults to "FIRE".
             dr (int, optional): rate at which to change values
             max_atom_num (int, optional): maximum atom number to be considered
+            perturbs (list, optional): list of perturbations to apply. Defaults to ['pos', 'cell', 'atomic_num', 'add', 'remove', 'swap']
+            elems_to_sample (list, optional): list of elements to sample from. Defaults to None
         """
         super().__init__(name, hops=hops, steps=steps, optimizer=optimizer, dr=dr, **kwargs)
         self.steps = steps
@@ -47,6 +49,11 @@ class BasinHoppingBase(Optimizer):
     def perturbPos(self, atoms, **kwargs):
         """
         Perturbs the positions of the atoms in the structure
+        Args:
+            atoms (Atoms): ASE Atoms object to perturb
+
+        Returns:
+            None
         """
         if isinstance(atoms, ExpCellFilter):
             disp = np.random.uniform(-1., 1., (len(atoms.atoms), 3)) * self.dr
@@ -58,6 +65,11 @@ class BasinHoppingBase(Optimizer):
     def perturbCell(self, atoms, **kwargs):
         """
         Perturbs the cell of the atoms in the structure
+        Args:
+            atoms (Atoms): ASE Atoms object to perturb
+
+        Returns:
+            None
         """
         if isinstance(atoms, ExpCellFilter):
             disp = np.random.uniform(-1., 1., (3, 3)) * self.dr
@@ -69,6 +81,13 @@ class BasinHoppingBase(Optimizer):
     def perturbAtomicNum(self, atoms, num_atoms_perturb=1, num_unique=4, **kwargs):
         """
         Perturbs the atomic numbers of the atoms in the structure
+        Args:
+            atoms (Atoms): ASE Atoms object to perturb
+            num_atoms_perturb (int, optional): Number of atoms to perturb. Defaults to 1.
+            num_unique (int, optional): Number of unique atoms in the structure. Defaults to 4.
+
+        Returns:
+            None
         """
         if isinstance(atoms, ExpCellFilter):
             un = np.unique(atoms.atoms.get_atomic_numbers())
@@ -102,6 +121,12 @@ class BasinHoppingBase(Optimizer):
     def addAtom(self, atoms, num_unique=4, **kwargs):
         """
         Adds an atom to the structure
+        Args:
+            atoms (Atoms): ASE Atoms object to perturb
+            num_unique (int, optional): Number of unique atoms in the structure. Defaults to 4.
+
+        Returns:
+            None
         """
         if isinstance(atoms, ExpCellFilter):
             un = np.unique(atoms.atoms.get_atomic_numbers())
@@ -131,6 +156,11 @@ class BasinHoppingBase(Optimizer):
     def removeAtom(self, atoms, **kwargs):
         """
         Removes an atom from the structure
+        Args:
+            atoms (Atoms): ASE Atoms object to perturb
+
+        Returns:
+            None
         """
         if isinstance(atoms, ExpCellFilter):
             if len(atoms.atoms) > 2:
@@ -142,6 +172,11 @@ class BasinHoppingBase(Optimizer):
     def swapAtom(self, atoms, **kwargs):
         """
         Swaps two atoms in the structure
+        Args:
+            atoms (Atoms): ASE Atoms object to perturb
+
+        Returns:
+            None
         """
         if isinstance(atoms, ExpCellFilter):
             nums = atoms.atoms.get_atomic_numbers()
@@ -155,6 +190,18 @@ class BasinHoppingBase(Optimizer):
             atoms.set_atomic_numbers(nums)
 
     def change_temp(self, temp, accepts, interval=10, target_ratio=0.5, rate=0.1):
+        """
+        Changes the temperature based on the acceptance ratio
+        Args:
+            temp (float): Temperature to change
+            accepts (list): List of acceptance ratios
+            interval (int, optional): Interval to check acceptance ratio. Defaults to 10.
+            target_ratio (float, optional): Target acceptance ratio. Defaults to 0.5.
+            rate (float, optional): Rate of change. Defaults to 0.1.
+        
+        Returns:
+            float: New temperature
+        """
         if len(accepts) % interval == 0 and len(accepts) != 0:
             if sum(accepts[-interval:]) / interval <= target_ratio:
                 temp *= 1 + rate
@@ -165,6 +212,16 @@ class BasinHoppingBase(Optimizer):
         return temp
 
     def change_dr(self, accepts, interval=10, target_ratio=0.5, rate=0.1):
+        """
+        Changes the dr based on the acceptance ratio
+        Args:
+            accepts (list): List of acceptance ratios
+            interval (int, optional): Interval to check acceptance ratio. Defaults to 10.
+            target_ratio (float, optional): Target acceptance ratio. Defaults to 0.5.
+            rate (float, optional): Rate of change. Defaults to 0.1.
+        Returns:
+            None
+        """
         if len(accepts) % interval == 0 and len(accepts) != 0:
             if sum(accepts[-interval:]) / interval <= target_ratio:
                 self.dr /= 1 + rate
@@ -173,6 +230,16 @@ class BasinHoppingBase(Optimizer):
             self.dr = max(0.1, min(self.dr, 1))
 
     def accept(self, old_energy, newEnergy, temp):
+        """
+        Acceptance criterion for the new energy
+        Args:
+            old_energy (float): Old energy
+            newEnergy (float): New energy
+            temp (float): Temperature
+        
+        Returns:
+            bool: Whether to accept the new energy
+        """
         return np.random.rand() < np.exp(-(newEnergy - old_energy) / temp)
 
 class BasinHoppingASE(BasinHoppingBase):
@@ -190,6 +257,8 @@ class BasinHoppingASE(BasinHoppingBase):
             optimizer (str, optional): Optimizer to use for each step. Defaults to "FIRE".
             dr (int, optional): rate at which to change values. Defaults to .5.
             max_atom_num (int, optional): maximum atom number to be considered, exclusive. Defaults to 101.
+            perturbs (list, optional): list of perturbations to apply. Defaults to ['pos', 'cell', 'atomic_num', 'add', 'remove', 'swap']
+            elems_to_sample (list, optional): list of elements to sample from. Defaults to None
         """
 
         super().__init__("BasinHoppingASE", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, perturbs=perturbs, elems_to_sample=elems_to_sample, **kwargs)
@@ -205,6 +274,7 @@ class BasinHoppingASE(BasinHoppingBase):
             cell_relax (bool, optional): whether to relax cell or not. Defaults to True.
             topk (int, optional): Number of best performing structures to save per composition. Defaults to 1.
             num_atoms_perturb (int, optional): number of atoms to perturb for perturbAtomicNum. Defaults to 1.
+            num_unique (int, optional): number of unique atoms in the structure. Defaults to 4.
 
         Returns:
             list: A list of ase.Atoms objects representing the predicted minima
@@ -266,6 +336,8 @@ class BasinHoppingBatch(BasinHoppingBase):
             optimizer (str, optional): Optimizer to use for each step. Defaults to "Adam".
             dr (int, optional): rate at which to change values. Defaults to .5.
             max_atom_num (int, optional): maximum atom number to be considered, exclusive. Defaults to 101.
+            perturbs (list, optional): list of perturbations to apply. Defaults to ['pos', 'cell', 'atomic_num', 'add', 'remove', 'swap']
+            elems_to_sample (list, optional): list of elements to sample from. Defaults to None
         """
         super().__init__("BasinHopping", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, perturbs=perturbs, elems_to_sample=elems_to_sample, **kwargs)
         self.forcefield = forcefield
@@ -284,9 +356,19 @@ class BasinHoppingBatch(BasinHoppingBase):
             log_per (int, optional): Print log messages for every log_per steps. Defaults to 0 (no logging).
             lr (int, optional): Learning rate for optimizer. Defaults to .5.
             num_atoms_perturb (int, optional): number of atoms to perturb for perturbAtomicNum
+            num_unique (int, optional): number of unique atoms in the structure. Defaults to 4.
+            dynamic_temp (bool, optional): Whether to change temperature dynamically. Defaults to False.
+            dynamic_dr (bool, optional): Whether to change dr dynamically. Defaults to False.
 
         Returns:
-            list: A list of ase.Atoms objects representing the predicted minima
+            res (list): A list of dictionaries containing the optimization results
+            min_atoms (list): A list of dictionaries containing the optimized structures
+            best_hop (list): A list of the best hops for each structure
+            energies (list): A list of the energies for each structure
+            accepts (list): A list of the acceptance ratios for each structure
+            accept_rate (list): A list of the acceptance rates for each structure
+            temps (list): A list of the temperatures for each structure
+            step_sizes (list): A list of the step sizes for each structure
         """
         new_atoms = dict_to_atoms(structures)
         min_atoms = deepcopy(new_atoms)

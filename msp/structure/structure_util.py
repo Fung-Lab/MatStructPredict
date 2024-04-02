@@ -15,6 +15,8 @@ def init_structure(composition, pyxtal=False, density=.2):
     
     Args:
         composition (list): A list of the atomic numbers
+        pyxtal (bool): If True, tries to use pyxtal to generate a random symmetric structure. 
+            If False, generates a completely random structure.
     
     Returns:
         dict: representing structure
@@ -87,7 +89,7 @@ def atoms_to_dict(atoms, loss=None):
     
     Args:
         atoms (list): A list of ASE atoms objects
-        energy (list): A list of predicted energies for each ASE atoms object.
+        loss (list): A list of predicted losses for each ASE atoms object.
     
     Returns:
         list: Contains atoms represented as dicts
@@ -168,6 +170,16 @@ def data_to_atoms(batch):
 def smact_validity(comp, count,
                    use_pauling_test=True,
                    include_alloys=True):
+    """
+    Check if a composition is valid according to the SMACt screening rules.
+    Args:
+        comp (list): List of atomic numbers
+        count (list): List of counts for each atomic number
+        use_pauling_test (bool): If True, uses the Pauling test to check if the electronegativity is valid.
+        include_alloys (bool): If True, allows for the composition to be an alloy.
+    Returns:
+        bool: True if the composition is valid, False otherwise.
+    """
     elem_symbols = tuple([chemical_symbols[elem] for elem in comp])
     space = smact.element_dictionary(elem_symbols)
     smact_elems = [e[1] for e in space.items()]
