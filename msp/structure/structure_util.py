@@ -2,14 +2,14 @@ import numpy as np
 from ase import Atoms
 import torch
 from torch_geometric.data import Data
-from ase.data import chemical_symbols
+from ase.data import chemical_symbols, atomic_masses
 import smact
 from smact.screening import pauling_test
 import itertools
 
 
 
-def init_structure(composition, pyxtal=False, density=.2):
+def init_structure(composition, pyxtal=False, density=4):
     """
     Creates a dictionary representing a structure from a composition
     
@@ -22,9 +22,10 @@ def init_structure(composition, pyxtal=False, density=.2):
         dict: representing structure
     """
     atoms = None
+    mass = sum([atomic_masses[num] for num in composition])
     if not pyxtal:
-        beta = np.random.uniform(0, 180)
-        gamma = np.random.uniform(0, 180)
+        beta = np.random.uniform(5, 174)
+        gamma = np.random.uniform(5, 174)
         minCosA = - np.sin(gamma * np.pi/180) * np.sqrt(1 - np.cos(beta* np.pi/180) ** 2) + np.cos(beta * np.pi/180) * np.cos(gamma * np.pi/180)
         maxCosA = np.sin(gamma * np.pi/180) * np.sqrt(1 - np.cos(beta* np.pi/180) ** 2) + np.cos(beta * np.pi/180) * np.cos(gamma * np.pi/180)
         alpha = np.random.uniform(minCosA, maxCosA)
@@ -34,8 +35,9 @@ def init_structure(composition, pyxtal=False, density=.2):
         c = np.random.rand() + .000001
         cell=[a, b, c, alpha, beta, gamma]
         atoms = Atoms(composition, cell=cell, pbc=(True, True, True))
-        vol = atoms.get_cell().volume
-        ideal_vol = len(composition) / density
+        vol = atoms.get_cell().volume   
+        # ideal_vol = len(composition) / density     
+        ideal_vol = mass / density
         scale = (ideal_vol / vol) ** (1/3)
         cell = [scale * a, scale * b, scale * c, alpha, beta, gamma]
         atoms.set_cell(cell)
@@ -59,8 +61,8 @@ def init_structure(composition, pyxtal=False, density=.2):
                 continue
         if use_random:
             print('Composition ', composition, 'not compatible with pyxtal. Using random structure')
-            beta = np.random.uniform(0, 180)
-            gamma = np.random.uniform(0, 180)
+            beta = np.random.uniform(5, 174)
+            gamma = np.random.uniform(5, 174)
             minCosA = - np.sin(gamma * np.pi/180) * np.sqrt(1 - np.cos(beta* np.pi/180) ** 2) + np.cos(beta * np.pi/180) * np.cos(gamma * np.pi/180)
             maxCosA = np.sin(gamma * np.pi/180) * np.sqrt(1 - np.cos(beta* np.pi/180) ** 2) + np.cos(beta * np.pi/180) * np.cos(gamma * np.pi/180)
             alpha = np.random.uniform(minCosA, maxCosA)
@@ -71,7 +73,8 @@ def init_structure(composition, pyxtal=False, density=.2):
             cell=[a, b, c, alpha, beta, gamma]
             atoms = Atoms(composition, cell=cell, pbc=(True, True, True))
             vol = atoms.get_cell().volume
-            ideal_vol = len(composition) / density
+            # ideal_vol = len(composition) / density 
+            ideal_vol = mass / density
             scale = (ideal_vol / vol) ** (1/3)
             cell = [scale * a, scale * b, scale * c, alpha, beta, gamma]
             atoms.set_cell(cell)

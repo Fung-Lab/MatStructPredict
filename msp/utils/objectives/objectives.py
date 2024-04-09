@@ -3,7 +3,6 @@ from pathlib import Path
 import numpy as np
 import time as time
 from torch_scatter import scatter_add
-from mendeleev.fetch import fetch_table
 
         
 class Energy(torch.nn.Module):
@@ -24,9 +23,7 @@ class Energy(torch.nn.Module):
         self.lj_rmins = np.load(str(Path(__file__).parent / "lj_rmins.npy")) * ljr_scale
         self.ljr_ratio = ljr_ratio
         self.energy_ratio = energy_ratio
-
-        if normalize:
-            self.element_energy = [-10000, -3.392726045, -0.00905951, -1.9089228666666667, -3.739412865, -6.679391770833334,
+        self.element_energy = [-10000, -3.392726045, -0.00905951, -1.9089228666666667, -3.739412865, -6.679391770833334,
                                 -9.2286654925, -8.336494925, -4.947961005, -1.9114789675, -0.02593678, -1.3225252934482759, 
                                 -1.60028005, -3.74557583, -5.42531803, -5.413302506666667, -4.136449866875, -1.84853666, 
                                 -0.06880822, -1.110398947, -2.00559988, -6.332469105, -7.895492016666666, -9.08390607, -9.65304747, 
@@ -167,6 +164,12 @@ class EmbeddingDistance(Energy):
         self.mode = mode
                 
     def set_norm_offset(self, z, n_atoms):
+        """
+        Set the offset for the energy normalization
+        Args:
+            z (torch.Tensor): Atomic numbers of the atoms in the batch
+            n_atoms (torch.Tensor): Number of atoms in each structure in the batch
+        """
         self.offset = torch.zeros((len(n_atoms), 1)).to(z.device)
         self.embeddings = self.embeddings.to(z.device)
         curr = 0

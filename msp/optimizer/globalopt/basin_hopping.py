@@ -41,8 +41,7 @@ class BasinHoppingBase(Optimizer):
         if elems_to_sample is None:
             self.elems = [1, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 19, 20, 21, 22, 23, 24, 
                           25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 
-                          48, 49, 50, 51, 52, 53, 55, 56, 57, 58, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 
-                          89, 90, 91, 92, 93, 94]
+                          48, 49, 50, 51, 52, 53, 55, 56, 57, 58, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83]
         else:
             self.elems = elems_to_sample
 
@@ -450,9 +449,9 @@ class BasinHoppingBatch(BasinHoppingBase):
                             'perturb': prev_perturb[j].__name__, 'composition': new_atoms[j].get_atomic_numbers(), 
                             'structure': atoms_to_dict([new_atoms[j]], obj_loss[j])[0]}
             else:
-                res[j][hop].append({'hop': i, 'objective_loss': obj_loss[j][0], 'energy_loss': energy_loss[j][0], 'novel_loss': novel_loss[j][0], 'soft_sphere_loss': soft_sphere_loss[j][0],
+                res[j][hop] = {'hop': i, 'objective_loss': obj_loss[j][0], 'energy_loss': energy_loss[j][0], 'novel_loss': novel_loss[j][0], 'soft_sphere_loss': soft_sphere_loss[j][0],
                             'perturb': prev_perturb[j].__name__, 'composition': new_atoms[j].get_atomic_numbers(), 
-                            'structure': atoms_to_dict([new_atoms[j]], obj_loss[j])[0]})
+                            'structure': atoms_to_dict([new_atoms[j]], obj_loss[j])[0]}
         for j, hop in enumerate(best_hop):
             print("Structure: ", j)
             print('\tBest hop: ', hop)
@@ -462,7 +461,7 @@ class BasinHoppingBatch(BasinHoppingBase):
                 print("\tUnnormalized energy loss: ", res[j][hop]['unnormalized_loss'])
             print("\tNovel loss: ", res[j][hop]['novel_loss'])
             print("\tSoft sphere loss: ", res[j][hop]['soft_sphere_loss'])
-            avg_loss += best_loss[j]
+            avg_loss += res[j][hop]['objective_loss']
         print('Avg Objective Loss', avg_loss / len(new_atoms))
         
         min_atoms = atoms_to_dict(best_atoms, min_objective_loss)

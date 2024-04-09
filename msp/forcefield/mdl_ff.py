@@ -153,6 +153,7 @@ class MDL_FF(ForceField):
             data.n_atoms = len(struc['atomic_numbers'])
             data.pos = torch.tensor(struc['positions'])
             data.cell = torch.tensor(np.array(struc['cell']), dtype=torch.float).view(1, 3, 3)
+            
             if (np.array(data.cell) == np.array([[0.0, 0.0, 0.0],[0.0, 0.0, 0.0],[0.0, 0.0, 0.0]])).all():
                 data.cell = torch.zeros((3,3)).unsqueeze(0)
             if 'structure_id' in struc:
@@ -274,7 +275,6 @@ class MDL_FF(ForceField):
                 print('Model', i, 'clustering took', time.time() - start_time)
                 res.append(clust.cluster_centers_)
             embeddings = torch.tensor(res)
-            print(embeddings.size())
             print(f"New embeddings are {embeddings.size()}")
         return embeddings
 
@@ -331,8 +331,7 @@ class MDL_FF(ForceField):
         print("device:", device)                       
         for i in range(len(loader_iter)):
             batch = next(loader_iter).to(device)
-            if getattr(objective_func, 'normalize', False):
-                objective_func.set_norm_offset(batch.z, batch.n_atoms)
+            objective_func.set_norm_offset(batch.z, batch.n_atoms)
             pos, cell = batch.pos, batch.cell
 
             opt = getattr(torch.optim, optim, 'Adam')([pos, cell], lr=learning_rate)
