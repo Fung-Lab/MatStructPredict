@@ -334,7 +334,7 @@ class MDL_FF(ForceField):
             objective_func.set_norm_offset(batch.z, batch.n_atoms)
             pos, cell = batch.pos, batch.cell
 
-            opt = getattr(torch.optim, optim, 'Adam')([pos, cell], lr=learning_rate)
+            opt = getattr(torch.optim, optim, torch.optim.Adam)([pos, cell], lr=learning_rate)
             lr_scheduler = ReduceLROnPlateau(opt, 'min', factor=0.8, patience=10)
 
             pos.requires_grad_(True)
