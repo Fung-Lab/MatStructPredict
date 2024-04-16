@@ -322,8 +322,142 @@ class BasinHoppingBatch(BasinHoppingBase):
         min_atoms = atoms_to_dict(min_atoms, min_loss)
         return res, min_atoms, best_hop
 
+class BasinHoppingCatalyst:
+    def __init__(self, forcefield, hops=5, steps=100, optimizer="Adam", dr=.5, max_atom_num=100, 
+                 catalyst_elem=78, radius=5.0, **kwargs):
+        self.forcefield = forcefield
+        self.hops = hops
+        self.steps = steps
+        self.optimizer = optimizer
+        self.dr = dr
+        self.max_atom_num = max_atom_num
+        self.catalyst_elem = catalyst_elem
+        self.radius = radius
+    
+    def addAtom2(self, atoms, **kwargs):
+        print("attempting to add")
+        print("atoms: ", atoms)
+        if len(atoms) < self.max_atom_num:
+            print("adding ")
+            pos = np.random.uniform(-self.radius, self.radius, size=(1, 3))
+            pos[:, 2] = atoms.positions[:, 2].max()  # Ensure the new atom is on the surface
+            atoms.append(Atom(self.catalyst_elem, position=pos[0]))
+
+    def get_surface_atoms_indices(self, atoms):
+        positions = [atom.position for atom in atoms]
+        x_min, x_max = min(position[0] for position in positions), max(position[0] for position in positions)
+        y_min, y_max = min(position[1] for position in positions), max(position[1] for position in positions)
+        z_min, z_max = min(position[2] for position in positions), max(position[2] for position in positions)
+        threshold = 0.1   # set a cutoff where all atoms greater than cutoff are considered surface
+        surface_atoms_indices = [index for index, atom in enumerate(atoms)
+                                if (x_max - atom.position[0] <= threshold) or (atom.position[0] - x_min <= threshold) or
+                                    (y_max - atom.position[1] <= threshold) or (atom.position[1] - y_min <= threshold) or
+                                    (z_max - atom.position[2] <= threshold) or (atom.position[2] - z_min <= threshold)]
+        return surface_atoms_indices
+
+    def addAtom(self, atoms, **kwargs):
+        if len(atoms) < self.max_atom_num:
+            x_range = (min(atom.position[0] for atom in atoms), max(atom.position[0] for atom in atoms))
+            y_range = (min(atom.position[1] for atom in atoms), max(atom.position[1] for atom in atoms))
+            z_max = max(atom.position[2] for atom in atoms)
+            x_pos = np.random.uniform(*x_range)
+            y_pos = np.random.uniform(*y_range)
+
+            surface_indices = self.get_surface_atoms_indices(atoms)
+            surface_atoms = [atoms[i] for i in surface_indices]
+
+            threshold = 0.1
+            z_pos = z_max + threshold
+
+            found_position = False
+            while z_pos > 0 and not found_position: 
+                for atom in surface_atoms:
+                    distance = np.linalg.norm(np.array([x_pos, y_pos, z_pos]) - atom.position)
+                    if distance < threshold:  # Threshold for being "close"
+                        found_position = True
+                        break
+                if not found_position:
+                    z_pos -= 0.1
+
+            new_atom = Atom(self.catalyst_elem, position=(x_pos, y_pos, z_pos))
+            print("Adding atom", new_atom, "at position", (x_pos, y_pos, z_pos))
+            atoms.append(new_atom)
+        else:
+            print("Maximum number of atoms reached. Skipping atom addition.")
+
+    def removeAtom(self, atoms, **kwargs):
+        catalyst_indices = [i for i, atom in enumerate(atoms) if atom.number == self.catalyst_elem]
+        print("Catalyst indices are:", catalyst_indices)
+        if catalyst_indices:
+            idx = np.random.choice(catalyst_indices)
+            del atoms[idx]
+            print("Removed atom at index", idx)
+        else:
+            print("No catalyst atoms found to remove")
+    def perturbPos(self, atoms, **kwargs):
+        print("attempting to perturb")
+        print("atoms: ", atoms)
+        print("catalyst elem is ", self.catalyst_elem)
+
+        catalyst_indices = [i for i, atom in enumerate(atoms) if atom.number == self.catalyst_elem]
+        print("catalyst indices are : ", catalyst_indices)
+        if catalyst_indices:
+            print("perturbing")
+            
+            idx = np.random.choice(catalyst_indices)
+            pos = atoms.positions[idx]
+            print("old position is ", pos)
+            pos += np.random.uniform(-self.dr, self.dr, size=3)  # Change size to (3,)
+            pos[2] = atoms.positions[:, 2].max()  # Ensure the perturbed atom stays on the surface
+            atoms.positions[idx] = pos
+            print("new position is ", pos)
+
+    def predict(self, structures, objective_func, cell_relax=True, topk=1, batch_size=4, log_per=0, lr=.05, density=.2):
+        new_atoms = deepcopy(structures)
+        min_atoms = deepcopy(new_atoms)
+        min_loss = [1e10] * len(min_atoms)
+        best_hop = [0] * len(min_atoms)
+        res = []
+        for _ in range(len(min_atoms)):
+            res.append([])
+        for i in range(self.hops):
+            start_time = time()
+            new_atoms, new_loss, prev_loss = self.forcefield.optimize(new_atoms, self.steps, objective_func, log_per, lr, batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer)
+            end_time = time()
+            for j in range(len(new_atoms)):
+                print(f"Hop {i}, Structure {j}: {new_atoms[j].get_chemical_formula()}")  # Debugging print statement
+                if new_loss[j] < min_loss[j]:
+                    min_loss[j] = new_loss[j]
+                    min_atoms[j] = new_atoms[j].copy()  # Update min_atoms with the best structure
+                    best_hop[j] = i
+                if getattr(objective_func, 'normalize', False):
+                    res[j].append({'hop': i, 'init_loss': prev_loss[j][0], 'loss': new_loss[j][0], 'raw_loss': objective_func.norm_to_raw_loss(new_loss[j][0], new_atoms[j].get_atomic_numbers()),
+                                'composition': new_atoms[j].get_atomic_numbers(), 
+                                'structure': atoms_to_dict([new_atoms[j]], new_loss[j])[0]})
+                else:
+                    res[j].append({'hop': i, 'init_loss': prev_loss[j][0], 'loss': new_loss[j][0],
+                                'composition': new_atoms[j].get_atomic_numbers(), 
+                                'structure': atoms_to_dict([new_atoms[j]], new_loss[j])[0]})
+            print('HOP', i, 'took', end_time - start_time, 'seconds')
+            for j in range(len(new_atoms)):
+                action = np.random.choice(['add', 'remove', 'perturb'])
+                action='perturb'
+                if action == 'add':
+                    self.addAtom(new_atoms[j])
+                elif action == 'remove':
+                    self.removeAtom(new_atoms[j])
+                else:  # perturb
+                    self.perturbPos(new_atoms[j])
+        avg_loss = 0
+        for j in range(len(min_loss)):
+            print('Structure', j, 'min energy', min_loss[j], 'best_hop', best_hop[j])
+            print(f"Final Structure {j}: {min_atoms[j].get_chemical_formula()}")  # Debugging print statement
+            avg_loss += min_loss[j]
+        print('Avg loss', avg_loss / len(new_atoms))
+        return res, min_atoms, best_hop
+
 class BasinHoppingSurface(BasinHoppingBase):
-    def __init__(self, calculator, hops=5, steps=100, optimizer="FIRE", dr=0.5, max_atom_num=101, **kwargs):
+    def __init__(self, calculator, hops=5, steps=100, optimizer="FIRE", dr=.5, max_atom_num=100, **kwargs):        
         super().__init__("BasinHoppingSurface", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, **kwargs)
         self.calculator=calculator
         self.virtual_sites=[]

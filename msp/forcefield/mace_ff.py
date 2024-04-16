@@ -1,5 +1,6 @@
 import sys
-sys.path.append(r"C:\Users\arnbn\Desktop\Useful\gt\fung_lab\MatDeepLearn_dev")
+#sys.path.append(r"C:\Users\arnbn\Desktop\Useful\gt\fung_lab\MatDeepLearn_dev")
+sys.path.append(r"/project/Arpan/MatDeepLearn_dev")
 import torch
 
 from msp.forcefield.base import ForceField

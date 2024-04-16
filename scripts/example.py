@@ -26,12 +26,12 @@ my_dataset = download_dataset(repo="MP", save=True)
 # or load dataset from disk:
 
 # my_dataset = load_dataset(path ="path/to/dataset")
-my_dataset = json.load(open("../data/data_subset_msp.json", "r"))
+my_dataset = json.load(open("data/data_subset_msp.json", "r"))
 # print(my_dataset[0])
 
 max_iterations=1
 #Initialize a forcefield class, reading in from config (we use MDL_FF but it can be a force field from another library)
-train_config = 'mdl_config.yml'
+train_config = 'scripts/mdl_config.yml'
 forcefield = MDL_FF(train_config, my_dataset)
 
 predictor = BasinHoppingASE(forcefield, hops=5, steps=100, optimizer="FIRE", dr=0.5, perturbs=['pos'])

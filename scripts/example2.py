@@ -1,6 +1,8 @@
 import sys
 sys.path.append(".")
+#sys.path.append("/net/csefiles/coc-fung-cluster/Arpan/MatStructPredict/")
 
+print(sys.path)
 from msp.dataset import download_dataset, load_dataset, combine_dataset, update_dataset
 from msp.composition import sample_random_composition
 from msp.optimizer.globalopt.basin_hopping import BasinHoppingSurface

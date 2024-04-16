@@ -1,8 +1,7 @@
 import sys
-sys.path.append(r"C:\Users\arnbn\Desktop\Useful\gt\fung_lab\MatDeepLearn_dev")
-
+#sys.path.append(r"C:\Users\arnbn\Desktop\Useful\gt\fung_lab\MatDeepLearn_dev")
+sys.path.append(r"/project/Arpan/MatDeepLearn_dev")
 from msp.forcefield.base import ForceField
-
 import torch
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
@@ -43,6 +42,7 @@ class MDL_FF(ForceField):
         #to be added
         self.dataset = {}
         dataset = self.process_data(dataset)
+        
         dataset = dataset['full']
         self.dataset["train"], self.dataset["val"], self.dataset["test"] = dataset_split(
                     dataset,
@@ -256,7 +256,9 @@ class MDL_FF(ForceField):
             if getattr(objective_func, 'normalize', False):
                 objective_func.set_norm_offset(batch.z, batch.n_atoms)
             pos, cell = batch.pos, batch.cell
-
+            #print("torch.optim: ", torch.optim)
+            #print("optim: ", optim)
+            
             opt = getattr(torch.optim, optim, 'Adam')([pos, cell], lr=learning_rate)
 
             pos.requires_grad_(True)
