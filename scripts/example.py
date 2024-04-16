@@ -24,10 +24,11 @@ my_dataset = download_dataset(repo="MP", save=True)
 #or load dataset from disk:
 
 #my_dataset = load_dataset(path ="path/to/dataset")
-# my_dataset = json.load(open("/global/cfs/projectdirs/m3641/Shared/Materials_datasets/MP_data_latest/raw/data.json", "r"))
-my_dataset = json.load(open("../data/data_subset_msp.json", "r"))
+my_dataset = json.load(open("/global/cfs/projectdirs/m3641/Shared/Materials_datasets/MP_data_latest/raw/data.json", "r"))
+predicted_structures = []
+# my_dataset = json.load(open("../data/data_subset_msp.json", "r"))
 #print(my_dataset[0])
-max_iterations=1
+max_iterations=2
 
 #Initialize a forcefield class, reading in from config (we use MDL_FF but it can be a force field from another library)
 train_config = 'mdl_config.yml'
@@ -36,7 +37,7 @@ forcefield = MDL_FF(train_config, my_dataset)
 
 #predictor = BasinHoppingASE(forcefield, hops=5, steps=100, optimizer="FIRE", dr=0.5)
 
-predictor_batch = BasinHoppingBatch(forcefield, hops=10, steps=100, dr=0.6, optimizer='Adam', perturbs=['pos', 'cell'])
+predictor_batch = BasinHoppingBatch(forcefield, hops=1, steps=100, dr=0.6, optimizer='Adam', perturbs=['pos', 'cell'])
 
 
 # forcefield_mace = MACE_FF()
@@ -57,13 +58,17 @@ for i in range(0, max_iterations):
     # compositions = sample_random_composition(dataset=my_dataset, n=1)
     # or manually specify the list of lists:
     # compositions = [[22, 22, 22, 22, 22, 22, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8] for _ in range(8)]
-    compositions = generate_random_compositions(my_dataset, n=8, max_elements=5, max_atoms=20)
+
+    if i != 0:
+        forcefield.update(predicted_structures, 1, 0, 0, max_epochs=30, save_model=False)
+
+    compositions = generate_random_compositions(my_dataset, n=2, max_elements=5, max_atoms=20)
     for comp in compositions:
         print(comp)
     initial_structures = [init_structure(c, pyxtal=False) for c in compositions]
-    for j, minima in enumerate(dict_to_atoms(initial_structures)):
-        filename = "initial_iteration_"+str(i)+"_structure_"+str(j)+".cif"
-        ase.io.write(filename, minima)
+    # for j, minima in enumerate(dict_to_atoms(initial_structures)):
+    #     filename = "initial_iteration_"+str(i)+"_structure_"+str(j)+".cif"
+    #     ase.io.write(filename, minima)
     # read_structure = ase.io.read("init.cif")
 
     # initial_structures=[atoms_to_dict([read_structure], loss=[None])]
@@ -90,13 +95,13 @@ for i in range(0, max_iterations):
     #---Optimizing a batch of structures with batch basin hopping---
     # alternatively if we dont use ASE, we can optimize in batch, and optimize over multiple objectives as well
     # we do this by first initializing our objective function, which is similar to the loss function class in matdeeplearn
-    objective_func = Energy(normalize=False, ljr_ratio=1)
+    objective_func = Energy(normalize=True, ljr_ratio=1)
     # objective_func = EmbeddingDistance(embeddings, normalize=True, energy_ratio=1, ljr_ratio=1, ljr_scale=.7, embedding_ratio=.1)
     # objective_func = EnergyAndUncertainty(normalize=True, uncertainty_ratio=.25, ljr_ratio=1, ljr_scale=.7)
     start_time = time.time()
     total_list_batch, minima_list_batch, best_hop, energies, accepts, accept_rate, temps, step_sizes = predictor_batch.predict(initial_structures, objective_func, batch_size=8, log_per=5, lr=.05)
-    minima_list_batch = dict_to_atoms(minima_list_batch)
-    for j, minima in enumerate(minima_list_batch):
+    minima_list_batch_ase = dict_to_atoms(minima_list_batch)
+    for j, minima in enumerate(minima_list_batch_ase):
         filename = "iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
         ase.io.write(filename, minima)
     f = open('output.txt', 'w')
@@ -214,6 +219,6 @@ for i in range(0, max_iterations):
     
     
     #update the dataset as well
-    update_dataset(repo="MP", data=dft_results)
+    predicted_structures.extend(minima_list_batch)
 
 print("Job done")

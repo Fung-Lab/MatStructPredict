@@ -97,7 +97,7 @@ class MDL_FF(ForceField):
         
     
 
-    def update(self, dataset, train_ratio, val_ratio, test_ratio, max_epochs=None, lr=None, batch_size=None, save_path='saved_model'):
+    def update(self, dataset, train_ratio, val_ratio, test_ratio, max_epochs=None, lr=None, batch_size=None, save_path='saved_model', save_model=True):
         """
         Updates the force field model on the dataset. (Essentially finetunes model on new data)
         Args:
@@ -124,17 +124,17 @@ class MDL_FF(ForceField):
         #self.model = self.trainer.model
         self.trainer.train()
 
-  
-        os.makedirs(save_path, exist_ok=True)
-        for i in range(len(self.trainer.model)):
-            sub_path = os.path.join(save_path, f"checkpoint_{i}",)        
-            os.makedirs(sub_path, exist_ok=True)        
-            if str(self.trainer.rank) not in ("cpu", "cuda"):
-                state = {"state_dict": self.trainer.model[i].module.state_dict()}         
-            else:   
-                state = {"state_dict": self.trainer.model[i].state_dict()}         
-            model_path = os.path.join(sub_path, "best_checkpoint.pt")  
-            torch.save(state, model_path)
+        if save_model:
+            os.makedirs(save_path, exist_ok=True)
+            for i in range(len(self.trainer.model)):
+                sub_path = os.path.join(save_path, f"checkpoint_{i}",)        
+                os.makedirs(sub_path, exist_ok=True)        
+                if str(self.trainer.rank) not in ("cpu", "cuda"):
+                    state = {"state_dict": self.trainer.model[i].module.state_dict()}         
+                else:   
+                    state = {"state_dict": self.trainer.model[i].state_dict()}         
+                model_path = os.path.join(sub_path, "best_checkpoint.pt")  
+                torch.save(state, model_path)
         gc.collect()
         torch.cuda.empty_cache()
             
@@ -151,8 +151,8 @@ class MDL_FF(ForceField):
         for i, struc in enumerate(dataset):
             data = new_data_list[i]
             data.n_atoms = len(struc['atomic_numbers'])
-            data.pos = torch.tensor(struc['positions'])
-            data.cell = torch.tensor(np.array(struc['cell']), dtype=torch.float).view(1, 3, 3)
+            data.pos = torch.tensor(struc['positions']).float()
+            data.cell = torch.tensor(np.array(struc['cell']), dtype=torch.float).view(1, 3, 3).float()
             
             if (np.array(data.cell) == np.array([[0.0, 0.0, 0.0],[0.0, 0.0, 0.0],[0.0, 0.0, 0.0]])).all():
                 data.cell = torch.zeros((3,3)).unsqueeze(0)
@@ -160,11 +160,10 @@ class MDL_FF(ForceField):
                 data.structure_id = [struc['structure_id']]
             else:
                 data.structure_id = [str(i)]
-            data.structure_id = [struc['structure_id']]
             data.z = torch.LongTensor(struc['atomic_numbers'])
-            if 'forces' in struc:
+            if 'forces' in struc and struc['forces'] is not None:
                 data.forces = torch.tensor(struc['forces'])
-            if 'stress' in struc:
+            if 'stress' in struc and struc['stress'] is not None:
                 data.stress = torch.tensor(struc['stress'])
             #optional
             data.u = torch.tensor(np.zeros((3))[np.newaxis, ...]).float()
@@ -178,7 +177,7 @@ class MDL_FF(ForceField):
         return dataset
 
 
-    def _forward(self, batch_data, embeddings=False):
+    def _forward(self, batch_data, embeddings=False, forces = False):
         """
         Calls model directly
         Args:
@@ -193,17 +192,28 @@ class MDL_FF(ForceField):
             out_list.append(self.trainer.model[i](batch_data))
                         
         out_stack = torch.stack([o["output"] for o in out_list])
+        if forces:
+            force_stack = torch.stack([o["pos_grad"] for o in out_list])
+            stress_stack = torch.stack([o["cell_grad"] for o in out_list])
+
         if embeddings:
             embed_stack = torch.stack([o["embedding"] for o in out_list])
+
         output = {}
         output["potential_energy"] = torch.mean(out_stack, dim=0)
         output["potential_energy_uncertainty"] = torch.std(out_stack, dim=0)
+        if forces:
+            output["forces"] = torch.mean(force_stack, dim=0)
+            output["stress"] = torch.mean(stress_stack, dim=0)
+        else:
+            output["forces"] = [None] * len(out_stack)
+            output["stress"] = [None] * len(out_stack)
         if embeddings:
             output['embeddings'] = embed_stack
         #output is a dict        
         return output
 
-    def _batched_forward(self, batch_data, embeddings = False):
+    def _batched_forward(self, batch_data, embeddings = False, forces = False):
         """
         Calls model in parallel using torch.vmap
         Args:
@@ -213,22 +223,36 @@ class MDL_FF(ForceField):
         Returns:
             dict: A dictionary of the model output.
         """
-        if embeddings:
+        output = {}
+        if embeddings and forces:
+            def fmodel(params, buffers, x):
+                output = functional_call(self.base_model, (params, buffers), (x,))
+                return output['output'], output['embedding'], output['pos_grad'], output['cell_grad']
+            out_stack, embed_stack, force_stack, stress_stack = torch.vmap(fmodel, in_dims=(0, 0, None))(self.params, self.buffers, batch_data)
+            output["forces"] = torch.mean(force_stack, dim=0)
+            output["stress"] = torch.mean(stress_stack, dim=0)
+            output['embeddings'] = embed_stack
+        elif embeddings:
             def fmodel(params, buffers, x):
                 output = functional_call(self.base_model, (params, buffers), (x,))
                 return output['output'], output['embedding']
             out_stack, embed_stack = torch.vmap(fmodel, in_dims=(0, 0, None))(self.params, self.buffers, batch_data)
+            output['embeddings'] = embed_stack
+        elif forces:
+            def fmodel(params, buffers, x):
+                output = functional_call(self.base_model, (params, buffers), (x,))
+                return output['output'], output['pos_grad'], output['cell_grad']
+            out_stack, force_stack, stress_stack = torch.vmap(fmodel, in_dims=(0, 0, None))(self.params, self.buffers, batch_data)
+            output["forces"] = torch.mean(force_stack, dim=0)
+            output["stress"] = torch.mean(stress_stack, dim=0)
         else:
             def fmodel(params, buffers, x):
                 output = functional_call(self.base_model, (params, buffers), (x,))
                 return output['output']
             out_stack = torch.vmap(fmodel, in_dims=(0, 0, None))(self.params, self.buffers, batch_data)
-        output = {}
         output["potential_energy"] = torch.mean(out_stack, dim=0)
         output["potential_energy_uncertainty"] = torch.std(out_stack, dim=0)
-        if embeddings:
-            output['embeddings'] = embed_stack
-        #output is a dict
+        
         return output
     
     def get_embeddings(self, dataset, batch_size, cluster=False, num_clusters=5000):
@@ -278,7 +302,44 @@ class MDL_FF(ForceField):
             print(f"New embeddings are {embeddings.size()}")
         return embeddings
 
+    def get_forces_and_stress(self, atoms, batch_size):
+        """
+        Get forces and stress from the model for the atoms.
+        Args:
+            atoms (list): A list of ASE atoms objects.
+            batch_size (int): The batch size for the model.
 
+        Returns:
+            tuple: A tuple of the forces and stress from the model.
+        """
+        data_list = atoms_to_data(atoms)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.params, self.buffers = stack_module_state(self.trainer.model)
+        self.base_model = copy.deepcopy(self.trainer.model[0])
+        self.base_model = self.base_model.to('meta')
+        loader = DataLoader(data_list, batch_size=batch_size)
+        loader_iter = iter(loader)
+        forces = []
+        stress = []
+        start_time = time.time()
+        temp = 1
+        print('Getting forces and stress for structures')
+        for i in range(len(loader_iter)):
+            batch = next(loader_iter).to(device)
+            out = self._forward(batch, forces=True)
+            forces.append(out['forces'])
+            stress.append(out['stress'])
+            print('Structures', temp, 'to', temp + len(batch) - 1, 'took', time.time() - start_time)
+            temp += len(batch)
+            start_time = time.time()
+        per_atom_forces = torch.cat(forces, dim=1).cpu().detach().numpy()
+        per_struc_forces = []
+        temp = 0
+        for i in range(len(data_list)):
+            per_struc_forces.append(per_atom_forces[temp:temp + data_list[i].n_atoms])
+            temp += data_list[i].n_atoms
+        stress = torch.cat(stress, dim=1).cpu().detach().numpy()
+        return per_struc_forces, stress
         
     def create_ase_calc(self):
         """
@@ -348,7 +409,7 @@ class MDL_FF(ForceField):
             step = [0]
             def closure(step, temp_obj, temp_energy, temp_novel, temp_soft_sphere, batch):
                 opt.zero_grad()
-                output = self._batched_forward(batch, embeddings=embed)
+                output = self._batched_forward(batch, embeddings=embed, forces=False)
                 objective_loss, energy_loss, novel_loss, soft_sphere_loss = objective_func(output, batch)
                 objective_loss.mean().backward(retain_graph=True)
                 
@@ -379,7 +440,7 @@ class MDL_FF(ForceField):
             energy_loss.extend(temp_energy[0].cpu().detach().numpy())
             novel_loss.extend(temp_novel[0].cpu().detach().numpy())
             soft_sphere_loss.extend(temp_soft_sphere[0].cpu().detach().numpy())
-            batch.z = batch.z.type(torch.int64)   
+            batch.z = batch.z.type(torch.int64)
         for i in range(len(self.trainer.model)):
             self.trainer.model[i].gradient = True           
 

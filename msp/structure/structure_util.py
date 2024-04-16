@@ -86,7 +86,7 @@ def init_structure(composition, pyxtal=False, density=4):
     
     return atoms_to_dict([atoms], [None])[0]
 
-def atoms_to_dict(atoms, loss=None):
+def atoms_to_dict(atoms, loss=None, forces=None, stress=None):
     """
     Creates a list of dict from a list of ASE atoms objects
     
@@ -100,14 +100,20 @@ def atoms_to_dict(atoms, loss=None):
     res = [{} for _ in atoms]
     for i, d in enumerate(res):
         d['n_atoms'] = len(atoms[i].get_atomic_numbers())
-        d['pos'] = atoms[i].get_positions()
-        d['cell'] = atoms[i].get_cell()
+        d['positions'] = atoms[i].get_positions()
+        d['cell'] = atoms[i].get_cell().array.tolist()
         d['z'] = atoms[i].get_atomic_numbers()
         d['atomic_numbers'] = atoms[i].get_atomic_numbers()
-        if loss is None:
-            d['loss'] = None
+        if loss is not None:
+            d['y'] = loss[i]
         else:
-            d['loss'] = loss[i]
+            d['loss'] = None
+        if forces is not None:
+            d['forces'] = forces[i] 
+            d['stress'] = stress[i].reshape(1, 3, 3)
+        else:
+            d['forces'] = None
+            d['stress'] = None
     return res
 
 def dict_to_atoms(dictionaries):
@@ -122,7 +128,7 @@ def dict_to_atoms(dictionaries):
     """
     res = []
     for d in dictionaries:
-        res.append(Atoms(d['z'], cell=d['cell'], positions=d['pos']))
+        res.append(Atoms(d['z'], cell=d['cell'], positions=d['positions']))
     return res
 
 def atoms_to_data(atoms):

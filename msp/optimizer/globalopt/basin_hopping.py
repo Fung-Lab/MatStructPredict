@@ -253,7 +253,7 @@ class BasinHoppingASE(BasinHoppingBase):
             forcefield: Takes a forcefield object with a create_ase_calc() function for the caclculator
             hops (int, optional): Number of basin hops. Defaults to 5.
             steps (int, optional): Number of steps per basin hop. Defaults to 100.
-            optimizer (str, optional): Optimizer to use for each step. Defaults to "FIRE".
+            optimizer (str, optional): The name of an ASE optimizer to use for each step. Defaults to "FIRE".
             dr (int, optional): rate at which to change values. Defaults to .5.
             max_atom_num (int, optional): maximum atom number to be considered, exclusive. Defaults to 101.
             perturbs (list, optional): list of perturbations to apply. Defaults to ['pos', 'cell', 'atomic_num', 'add', 'remove', 'swap']
@@ -294,7 +294,7 @@ class BasinHoppingASE(BasinHoppingBase):
             res.append([])
             for i in range(self.hops):
                 old_energy = atom.get_potential_energy(force_consistent=False)
-                optimizer = getattr(ase.optimize, self.optimizer, 'FIRE')(atom, logfile=None)
+                optimizer = getattr(ase.optimize, self.optimizer, ase.optimize.FIRE)(atom, logfile=None)
                 start_time = time()
                 optimizer.run(fmax=0.001, steps=self.steps)
                 end_time = time()
@@ -332,7 +332,7 @@ class BasinHoppingBatch(BasinHoppingBase):
             forcefield: Takes a forcefield object with a create_ase_calc() function for the caclculator
             hops (int, optional): Number of basin hops. Defaults to 5.
             steps (int, optional): Number of steps per basin hop. Defaults to 100.
-            optimizer (str, optional): Optimizer to use for each step. Defaults to "Adam".
+            optimizer (str, optional): The name of a torch.optim optimizer to use for each step. Defaults to "Adam".
             dr (int, optional): rate at which to change values. Defaults to .5.
             max_atom_num (int, optional): maximum atom number to be considered, exclusive. Defaults to 101.
             perturbs (list, optional): list of perturbations to apply. Defaults to ['pos', 'cell', 'atomic_num', 'add', 'remove', 'swap']
@@ -379,7 +379,7 @@ class BasinHoppingBatch(BasinHoppingBase):
         accepts = [[] for _ in range(len(new_atoms))]
         accept_rate = [[] for _ in range(len(new_atoms))]
         temps = [[] for _ in range(len(new_atoms))]
-        energies = [[] for _ in range(len(new_atoms))]
+        losses = [[] for _ in range(len(new_atoms))]
         step_sizes = []
         temp = [0.0001 for _ in range(len(new_atoms))]
 
@@ -411,7 +411,7 @@ class BasinHoppingBatch(BasinHoppingBase):
                         best_atoms[j] = min_atoms[j].copy()
                         best_hop[j] = i
                 prev_step_loss[j] = obj_loss[j]
-                energies[j].append(obj_loss[j])
+                losses[j].append(obj_loss[j])
                 accepts[j].append(accept)
                 if len(accepts[j]) % 10 == 0:
                     accept_rate[j].append(sum(accepts[j][-10:]))
@@ -452,18 +452,22 @@ class BasinHoppingBatch(BasinHoppingBase):
                 res[j][hop] = {'hop': i, 'objective_loss': obj_loss[j][0], 'energy_loss': energy_loss[j][0], 'novel_loss': novel_loss[j][0], 'soft_sphere_loss': soft_sphere_loss[j][0],
                             'perturb': prev_perturb[j].__name__, 'composition': new_atoms[j].get_atomic_numbers(), 
                             'structure': atoms_to_dict([new_atoms[j]], obj_loss[j])[0]}
+        raw_energy = [0] * len(new_atoms)
         for j, hop in enumerate(best_hop):
             print("Structure: ", j)
             print('\tBest hop: ', hop)
             print("\tObjective loss: ", res[j][hop]['objective_loss'])
             print("\tEnergy loss: ", res[j][hop]['energy_loss'])
+            raw_energy[j] = res[j][hop]['energy_loss']
             if getattr(objective_func, 'normalize', False):
                 print("\tUnnormalized energy loss: ", res[j][hop]['unnormalized_loss'])
+                raw_energy[j] = res[j][hop]['unnormalized_loss']
             print("\tNovel loss: ", res[j][hop]['novel_loss'])
             print("\tSoft sphere loss: ", res[j][hop]['soft_sphere_loss'])
             avg_loss += res[j][hop]['objective_loss']
         print('Avg Objective Loss', avg_loss / len(new_atoms))
+        forces, stress = self.forcefield.get_forces_and_stress(best_atoms, batch_size=batch_size)
+        best_atoms = atoms_to_dict(best_atoms, raw_energy, forces, stress)
         
-        min_atoms = atoms_to_dict(best_atoms, min_objective_loss)
-        return res, min_atoms, best_hop, energies, accepts, accept_rate, temps, step_sizes
+        return res, best_atoms, best_hop, losses, accepts, accept_rate, temps, step_sizes
 
