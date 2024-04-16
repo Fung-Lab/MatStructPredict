@@ -1,13 +1,143 @@
 import numpy as np
-from ase import Atoms
+from ase import Atoms, io
 import torch
 from torch_geometric.data import Data
 from ase.data import chemical_symbols
 import smact
 from smact.screening import pauling_test
+import pymatgen, pymatgen.io.ase, pymatgen
+from pymatgen.core.structure import Element
+from ase.data import chemical_symbols
 import itertools
+from itertools import product
+from pymatgen.io.cif import CifWriter
 
+def atoms_to_dict(atoms, loss=None):
+    """
+    Creates a list of dict from a list of ASE atoms objects
+    
+    Args:
+        atoms (list): A list of ASE atoms objects
+        energy (list): A list of predicted energies for each ASE atoms object.
+    
+    Returns:
+        list: Contains atoms represented as dicts
+    """
+    res = [{} for _ in atoms]
+    for i, d in enumerate(res):
+        d['n_atoms'] = len(atoms[i].get_atomic_numbers())
+        d['pos'] = atoms[i].get_positions()
+        d['cell'] = atoms[i].get_cell()
+        d['z'] = atoms[i].get_atomic_numbers()
+        d['atomic_numbers'] = atoms[i].get_atomic_numbers()
+        if loss is None:
+            d['loss'] = None
+        else:
+            d['loss'] = loss[i]
+    return res
 
+# this method is for the init_structure_by_template method
+def generate_replacements(lst, original_element, replacements):
+    if original_element == replacements[0]:
+        return []
+    num_elements = len(lst)
+    
+    # Generate all possible combinations of replacements
+    replacement_combinations = product(replacements, repeat=num_elements)
+
+    # Generate lists with replacements
+    result = []
+    for combination in replacement_combinations:
+        new_list = [elem if elem != original_element else combination[i] for i, elem in enumerate(lst)]
+        result.append(new_list)
+
+    return result
+
+# substitution templating method for materials discovery
+def init_structure_by_template(template_list, unique_output=True):
+    # all elements, so they can be considered for replacement in material templates
+    element_abbreviations = [
+    "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca",
+    "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb", "Sr", "Y",
+    "Zr", "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In", "Sn", "Sb", "Te", "I", "Xe", "Cs", "Ba", "La", "Ce",
+    "Pr", "Nd", "Pm", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho", "Er", "Tm", "Yb", "Lu", "Hf", "Ta", "W", "Re", "Os", "Ir",
+    "Pt", "Au", "Hg", "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th", "Pa", "U", "Np", "Pu", "Am", "Cm",
+    "Bk", "Cf", "Es", "Fm", "Md", "No", "Lr", "Rf", "Db", "Sg", "Bh", "Hs", "Mt", "Ds", "Rg", "Cn", "Nh", "Fl", "Mc",
+    "Lv", "Ts", "Og"
+    ]
+
+    pymatgen_list = []
+
+    # reads .json formatted filename into ase Atoms object then into pymatgen Structure object
+    for crystal in template_list:
+        crystal = io.read(f'/global/cfs/projectdirs/m3641/Shared/Materials_datasets/MP_data_69K/raw/{crystal}')
+        pymatgen_crystal = pymatgen.io.ase.AseAtomsAdaptor.get_structure(crystal)
+        pymatgen_list.append(pymatgen_crystal)
+        
+    new_crystals = []
+    # method to find new crystals using templates
+    for crystal in pymatgen_list:
+        unique_elements = set(crystal.species)
+
+        for elem in unique_elements:
+            for element in element_abbreviations:
+                num_candidates = crystal.species.count(elem)
+
+                start_index = crystal.species.index(elem)
+                # gets the atoms of one type of which to compute possible changes
+                base_list = crystal[crystal.species.index(elem): crystal.species.index(elem) + num_candidates]
+                # reformats base_list
+                base_list = [base_list[i].species_string for i in range(len(base_list))]
+
+                # will do a substition if there are any shared oxidation states between current element and candidate
+                shared_oxidation_states = set(Element(base_list[0]).common_oxidation_states).intersection(set(Element(element).common_oxidation_states))
+                if len(shared_oxidation_states) > 0:
+                    candidates = generate_replacements(base_list, base_list[0], [element, base_list[0]])[:-1]
+
+                    for x, candidate in enumerate(candidates):
+                        temp_crystal = crystal.copy()
+                        
+                        # makes the substitions
+                        for i in range(num_candidates):
+                            temp_crystal[i+start_index] = candidate[i]
+
+                        new_crystals.append(temp_crystal.copy())
+
+    # gets rid of all symmetrically non-unique crystals in the new crystal list
+    if unique_output:
+        unique_new_crystals = []
+        for crystal in new_crystals:
+            add_to_unique_list = True
+
+            for crystal_comparison in unique_new_crystals:
+                if crystal_comparison.matches(crystal, anonymous=False):
+                    add_to_unique_list = False
+
+            if add_to_unique_list:
+                unique_new_crystals.append(crystal)
+    
+    # code to write results as .cif files
+    '''
+    for x, cryst in enumerate(new_crystals):
+        w = CifWriter(cryst)
+        w.write_file(f'results_{x}.cif')
+
+    return
+    '''
+
+    # conversion to ase object and then to dictionary format
+    if unique_output:
+        for i, struct in enumerate(unique_new_crystals):
+            unique_new_crystals[i] = pymatgen.io.ase.AseAtomsAdaptor.get_atoms(struct)
+            unique_new_crystals[i] = atoms_to_dict([unique_new_crystals[i]], [None])[0]
+
+        return unique_new_crystals
+    else:
+        for i, struct in enumerate(new_crystals):
+            new_crystals[i] = pymatgen.io.ase.AseAtomsAdaptor.get_atoms(struct)
+            new_crystals[i] = atoms_to_dict([new_crystals[i]], [None])[0]
+
+        return new_crystals
 
 def init_structure(composition, pyxtal=False, density=.2):
     """
@@ -80,30 +210,6 @@ def init_structure(composition, pyxtal=False, density=.2):
             atoms = struc.to_ase()
     
     return atoms_to_dict([atoms], [None])[0]
-
-def atoms_to_dict(atoms, loss=None):
-    """
-    Creates a list of dict from a list of ASE atoms objects
-    
-    Args:
-        atoms (list): A list of ASE atoms objects
-        energy (list): A list of predicted energies for each ASE atoms object.
-    
-    Returns:
-        list: Contains atoms represented as dicts
-    """
-    res = [{} for _ in atoms]
-    for i, d in enumerate(res):
-        d['n_atoms'] = len(atoms[i].get_atomic_numbers())
-        d['pos'] = atoms[i].get_positions()
-        d['cell'] = atoms[i].get_cell()
-        d['z'] = atoms[i].get_atomic_numbers()
-        d['atomic_numbers'] = atoms[i].get_atomic_numbers()
-        if loss is None:
-            d['loss'] = None
-        else:
-            d['loss'] = loss[i]
-    return res
 
 def dict_to_atoms(dictionaries):
     """
