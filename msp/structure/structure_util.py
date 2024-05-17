@@ -3,13 +3,11 @@ from ase import Atoms, io
 import torch
 from torch_geometric.data import Data
 from ase.data import chemical_symbols
-import smact
-from smact.screening import pauling_test
 import pymatgen, pymatgen.io.ase, pymatgen
 from pymatgen.core.structure import Element
 from ase.data import chemical_symbols
 import itertools
-from itertools import product
+from itertools import product, chain
 from pymatgen.io.cif import CifWriter
 
 def atoms_to_dict(atoms, loss=None):
@@ -36,26 +34,19 @@ def atoms_to_dict(atoms, loss=None):
             d['loss'] = loss[i]
     return res
 
-# this method is for the init_structure_by_template method
-def generate_replacements(lst, original_element, replacements):
-    if original_element == replacements[0]:
-        return []
-    num_elements = len(lst)
+# takes a list of similar elements, base_list, and creates all possible permutations with the replacement elements
+def generate_replacements(base_list, replacement):
+    replacements = product((base_list[0], replacement), repeat=len(base_list))
     
-    # Generate all possible combinations of replacements
-    replacement_combinations = product(replacements, repeat=num_elements)
+    possibilities = []
 
-    # Generate lists with replacements
-    result = []
-    for combination in replacement_combinations:
-        new_list = [elem if elem != original_element else combination[i] for i, elem in enumerate(lst)]
-        result.append(new_list)
+    for i in replacements:
+        possibilities.append(list(i))
 
-    return result
+    return possibilities
 
-# substitution templating method for materials discovery
-def init_structure_by_template(template_list, unique_output=True):
-    # all elements, so they can be considered for replacement in material templates
+# for a given atom, returns a list of all possible replacements atoms based on common oxidation states
+def generate_replacement_possibilities(atom):
     element_abbreviations = [
     "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca",
     "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb", "Sr", "Y",
@@ -66,78 +57,72 @@ def init_structure_by_template(template_list, unique_output=True):
     "Lv", "Ts", "Og"
     ]
 
-    pymatgen_list = []
+    possibilities = []
 
-    # reads .json formatted filename into ase Atoms object then into pymatgen Structure object
-    for crystal in template_list:
-        crystal = io.read(f'/global/cfs/projectdirs/m3641/Shared/Materials_datasets/MP_data_69K/raw/{crystal}')
-        pymatgen_crystal = pymatgen.io.ase.AseAtomsAdaptor.get_structure(crystal)
-        pymatgen_list.append(pymatgen_crystal)
-        
-    new_crystals = []
-    # method to find new crystals using templates
-    for crystal in pymatgen_list:
-        unique_elements = set(crystal.species)
+    for el in element_abbreviations:
+        if len(set(Element(atom).common_oxidation_states).intersection(set(Element(el).common_oxidation_states))) > 0:
+            possibilities.append(el)
 
-        for elem in unique_elements:
-            for element in element_abbreviations:
-                num_candidates = crystal.species.count(elem)
+    return possibilities
 
-                start_index = crystal.species.index(elem)
-                # gets the atoms of one type of which to compute possible changes
-                base_list = crystal[crystal.species.index(elem): crystal.species.index(elem) + num_candidates]
-                # reformats base_list
-                base_list = [base_list[i].species_string for i in range(len(base_list))]
+# recursive substitution method 
+def recursively_create_combinations(ls, index=0):
+    new_structures = []
 
-                # will do a substition if there are any shared oxidation states between current element and candidate
-                shared_oxidation_states = set(Element(base_list[0]).common_oxidation_states).intersection(set(Element(element).common_oxidation_states))
-                if len(shared_oxidation_states) > 0:
-                    candidates = generate_replacements(base_list, base_list[0], [element, base_list[0]])[:-1]
+    replacement_possibilities = generate_replacement_possibilities(ls[index][0])
 
-                    for x, candidate in enumerate(candidates):
-                        temp_crystal = crystal.copy()
-                        
-                        # makes the substitions
-                        for i in range(num_candidates):
-                            temp_crystal[i+start_index] = candidate[i]
+    replacements = []
 
-                        new_crystals.append(temp_crystal.copy())
+    for atom in replacement_possibilities:
+        replacements.append(generate_replacements(ls[index], atom))
 
-    # gets rid of all symmetrically non-unique crystals in the new crystal list
-    if unique_output:
-        unique_new_crystals = []
-        for crystal in new_crystals:
-            add_to_unique_list = True
+    for x in replacements:
+        for y in x:
+            new_structure = ls.copy()
+            new_structure[index] = y
+            new_structures.append(new_structure)
 
-            for crystal_comparison in unique_new_crystals:
-                if crystal_comparison.matches(crystal, anonymous=False):
-                    add_to_unique_list = False
-
-            if add_to_unique_list:
-                unique_new_crystals.append(crystal)
+    for struct in new_structures.copy():
+        if index != len(ls) - 1:
+            new_structures.extend(recursively_create_combinations(struct, index + 1))
     
-    # code to write results as .cif files
-    '''
-    for x, cryst in enumerate(new_crystals):
-        w = CifWriter(cryst)
-        w.write_file(f'results_{x}.cif')
+    return new_structures
 
-    return
-    '''
+# recursively finds new structure possibilities based on a list of ase Atoms object templates
+def substitution_discovery(templates):
+    all_new_structures = []
+    for t in templates:
+        crystal = io.read(f'/Users/oscarrivera/MatStructPredict_2/data/{t}')
+        crystal = crystal.get_chemical_symbols()
 
-    # conversion to ase object and then to dictionary format
-    if unique_output:
-        for i, struct in enumerate(unique_new_crystals):
-            unique_new_crystals[i] = pymatgen.io.ase.AseAtomsAdaptor.get_atoms(struct)
-            unique_new_crystals[i] = atoms_to_dict([unique_new_crystals[i]], [None])[0]
+        formatted_crystal = []
+        temp_ls = [crystal[0]]
+        previous_atom = crystal[0]
+        for i in crystal[1:]: 
+            if i == previous_atom:
+                temp_ls.append(i)
+            else:
+                previous_atom = i
+                formatted_crystal.append(temp_ls)
+                temp_ls = [i]
 
-        return unique_new_crystals
-    else:
-        for i, struct in enumerate(new_crystals):
-            new_crystals[i] = pymatgen.io.ase.AseAtomsAdaptor.get_atoms(struct)
-            new_crystals[i] = atoms_to_dict([new_crystals[i]], [None])[0]
+        formatted_crystal.append(temp_ls)
 
-        return new_crystals
+        new_structures = recursively_create_combinations(formatted_crystal)
+
+        unique = []
+        for e in new_structures:
+            if e not in unique:
+                unique.append(e)
+        
+        # check this method
+        for n, u in enumerate(unique):
+            flattened_u = chain(*u)
+            unique[n] = Atoms(flattened_u)
+        
+        unique = atoms_to_dict(unique)
+
+        return unique
 
 def init_structure(composition, pyxtal=False, density=.2):
     """
