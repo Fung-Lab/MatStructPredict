@@ -121,8 +121,9 @@ def substitution_discovery(templates):
             unique[n] = Atoms(flattened_u)
         
         unique = atoms_to_dict(unique)
+        all_new_structures.extend(unique)
 
-        return unique
+    return all_new_structures
 
 def init_structure(composition, pyxtal=False, density=.2):
     """
