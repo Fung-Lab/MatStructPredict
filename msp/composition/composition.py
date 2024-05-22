@@ -43,8 +43,8 @@ def generate_random_compositions(dataset, n=5, max_elements=5, max_atoms=20, ele
     Args:
         dataset (dict): dictionary of dataset
         n (int): number of compositions to generate
-        max_elements (int): maximum number of elements in composition
-        max_atoms (int): maximum number of atoms per element
+        max_elements (int): maximum number of unique elements in composition
+        max_atoms (int): maximum number of atoms in composition
         elems_to_sample (list): list of elements to sample from
     
     Returns:
@@ -85,7 +85,7 @@ def generate_random_compositions(dataset, n=5, max_elements=5, max_atoms=20, ele
             print('Potential composition: ', comp)
             smact_valid = smact_validity(rand_elems, freq)
             print('SMACT validity: ', smact_valid)
-            if not smact_validity(rand_elems, freq):
+            if not smact_valid:
                 print('Invalid composition')
                 continue
             comp_hash = hash_structure(comp)
@@ -95,8 +95,65 @@ def generate_random_compositions(dataset, n=5, max_elements=5, max_atoms=20, ele
                 comp_hashes.append(comp_hash)
                 break
             else:
-                print('Invalid compositon, already occurs')
+                print('Invalid compositon, already occurs in dataset')
     return compositions
+
+def generate_random_lithium_compositions(dataset, n=5,  max_elements=6, max_atoms=20, li_ratio_lower=.2, li_ratio_upper=.4, halide_ratio_lower=.2, halide_ratio_upper=.5):
+    """
+    Generate n unique lithium compositions that do not appear in dataset randomly
+    Args:
+        dataset (dict): dictionary of dataset
+        n (int): number of compositions to generate
+        max_elements (int): maximum number of unique elements in composition
+        max_atoms (int): maximum number of atoms in composition
+        li_ratio_lower (float): lower bound for lithium ratio
+        li_ratio_upper (float): upper bound for lithium ratio
+        halide_ratio_lower (float): lower bound for halide ratio
+        halide_ratio_upper (float): upper bound for halide ratio
+    
+    Returns:
+        compositions (list): list of compositions
+    """
+    compositions = []
+    comp_hashes = []
+    hashed_dataset = hash_dataset(dataset)
+    halides = [9, 17]
+    metals = [39, 13, 22, 21, 31, 49, 40, 12, 30, 32, 57, 58, 41]
+    for i in range(n):
+        while True:
+            comp = []
+            total_atoms = np.random.randint(5, max_atoms + 1)
+            num_lithium = np.random.randint(max(1, round(total_atoms * li_ratio_lower)), round(total_atoms * li_ratio_upper) + 1)
+            comp.extend([3] * num_lithium)
+            num_halides = np.random.randint(round(total_atoms * halide_ratio_lower), round(total_atoms * halide_ratio_upper) + 1)
+            comp.extend(np.random.choice(halides, num_halides, replace=True))
+            if len(comp) >= total_atoms:
+                print('Invalid composition, no space for metals: ', comp)
+                continue
+            temp_metals = []
+            while np.unique(comp).size < max_elements and len(comp) < total_atoms:
+                temp_metals = np.random.choice(metals, 1, replace=True)
+                comp.append(temp_metals[-1])
+            if len(comp) < total_atoms:
+                comp.extend(np.random.choice(temp_metals, total_atoms - len(comp), replace=True))
+            elems = np.unique(comp)
+            freq = [comp.count(elem) for elem in elems]
+            smact_valid = smact_validity(elems, freq)
+            print('SMACT validity: ', smact_valid)
+            if not smact_valid:
+                print('Invalid composition')
+                continue
+            comp_hash = hash_structure(comp)
+            if comp_hash not in hashed_dataset and comp_hash not in comp_hashes:
+                print('Accepted composition', i, ':', comp)
+                comp.sort()
+                compositions.append(comp)
+                comp_hashes.append(comp_hash)
+                break
+            else:
+                print('Invalid compositon, already occurs in dataset')
+    return compositions
+
 
 def sample_random_composition(dataset, n=5):
     """

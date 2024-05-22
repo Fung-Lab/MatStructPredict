@@ -2,6 +2,7 @@ import numpy as np
 from ase import Atoms
 import torch
 from torch_geometric.data import Data
+import random
 from ase.data import chemical_symbols, atomic_masses
 import smact
 from smact.screening import pauling_test
@@ -9,7 +10,7 @@ import itertools
 
 
 
-def init_structure(composition, pyxtal=False, density=4):
+def init_structure(composition, pyxtal=False, density=2):
     """
     Creates a dictionary representing a structure from a composition
     
@@ -24,19 +25,18 @@ def init_structure(composition, pyxtal=False, density=4):
     atoms = None
     mass = sum([atomic_masses[num] for num in composition])
     if not pyxtal:
-        beta = np.random.uniform(5, 174)
-        gamma = np.random.uniform(5, 174)
+        beta = np.random.uniform(10, 169)
+        gamma = np.random.uniform(10, 169)
         minCosA = - np.sin(gamma * np.pi/180) * np.sqrt(1 - np.cos(beta* np.pi/180) ** 2) + np.cos(beta * np.pi/180) * np.cos(gamma * np.pi/180)
         maxCosA = np.sin(gamma * np.pi/180) * np.sqrt(1 - np.cos(beta* np.pi/180) ** 2) + np.cos(beta * np.pi/180) * np.cos(gamma * np.pi/180)
         alpha = np.random.uniform(minCosA, maxCosA)
         alpha = np.arccos(alpha) * 180 / np.pi
-        a = np.random.rand() + .000001
-        b = np.random.rand() + .000001
-        c = np.random.rand() + .000001
+        a = np.random.uniform(0.2, 1)
+        b = np.random.uniform(0.2, 1)
+        c = np.random.uniform(0.2, 1)
         cell=[a, b, c, alpha, beta, gamma]
         atoms = Atoms(composition, cell=cell, pbc=(True, True, True))
         vol = atoms.get_cell().volume   
-        # ideal_vol = len(composition) / density     
         ideal_vol = mass / density
         scale = (ideal_vol / vol) ** (1/3)
         cell = [scale * a, scale * b, scale * c, alpha, beta, gamma]
@@ -50,26 +50,28 @@ def init_structure(composition, pyxtal=False, density=4):
         counts = [composition.count(num) for num in unique_nums]
         symbols = [chemical_symbols[num] for num in unique_nums]
         struct_num = 0
-        use_random = False
-        for i in range(1, 231):
+        space_group  = list(range(2, 231))
+        random.shuffle(space_group)
+        use_random = True
+        for i in space_group:
             try:
-                use_random = True
                 struct_num = i
-                struc.from_random(3, i, symbols, counts)
+                struc.from_random(3, i, symbols, counts, factor=1.4, max_count=20)
+                use_random = False
                 break
-            except:
-                continue
+            except Exception as e:
+                pass
         if use_random:
             print('Composition ', composition, 'not compatible with pyxtal. Using random structure')
-            beta = np.random.uniform(5, 174)
-            gamma = np.random.uniform(5, 174)
+            beta = np.random.uniform(10, 169)
+            gamma = np.random.uniform(10, 169)
             minCosA = - np.sin(gamma * np.pi/180) * np.sqrt(1 - np.cos(beta* np.pi/180) ** 2) + np.cos(beta * np.pi/180) * np.cos(gamma * np.pi/180)
             maxCosA = np.sin(gamma * np.pi/180) * np.sqrt(1 - np.cos(beta* np.pi/180) ** 2) + np.cos(beta * np.pi/180) * np.cos(gamma * np.pi/180)
             alpha = np.random.uniform(minCosA, maxCosA)
             alpha = np.arccos(alpha) * 180 / np.pi
-            a = np.random.rand() + .000001
-            b = np.random.rand() + .000001
-            c = np.random.rand() + .000001
+            a = np.random.uniform(0.2, 1)
+            b = np.random.uniform(0.2, 1)
+            c = np.random.uniform(0.2, 1)
             cell=[a, b, c, alpha, beta, gamma]
             atoms = Atoms(composition, cell=cell, pbc=(True, True, True))
             vol = atoms.get_cell().volume
@@ -86,7 +88,7 @@ def init_structure(composition, pyxtal=False, density=4):
     
     return atoms_to_dict([atoms], [None])[0]
 
-def atoms_to_dict(atoms, loss=None, forces=None, stress=None):
+def atoms_to_dict(atoms, objective_loss=None, raw_energy=None, forces=None, stress=None):
     """
     Creates a list of dict from a list of ASE atoms objects
     
@@ -104,10 +106,14 @@ def atoms_to_dict(atoms, loss=None, forces=None, stress=None):
         d['cell'] = atoms[i].get_cell().array.tolist()
         d['z'] = atoms[i].get_atomic_numbers()
         d['atomic_numbers'] = atoms[i].get_atomic_numbers()
-        if loss is not None:
-            d['y'] = loss[i]
+        if raw_energy is not None:
+            d['y'] = raw_energy[i]
         else:
-            d['loss'] = None
+            d['y'] = None
+        if objective_loss is not None:
+            d['objective_loss'] = objective_loss[i]
+        else:
+            d['objective_loss'] = None
         if forces is not None:
             d['forces'] = forces[i] 
             d['stress'] = stress[i].reshape(1, 3, 3)

@@ -7,7 +7,7 @@ from torch_scatter import scatter_add
         
 class Energy(torch.nn.Module):
 
-    def __init__(self, normalize=True, energy_ratio=1.0, ljr_ratio=1.0, ljr_power=12, ljr_scale = .8):
+    def __init__(self, normalize=True, energy_ratio=1.0, ljr_ratio=1.0, ljr_power=12, ljr_scale = .8, min_ljr_val=1.0):
         super().__init__()
         """
         Initialize objective function using only energy and no novel loss
@@ -21,6 +21,7 @@ class Energy(torch.nn.Module):
         self.normalize = normalize
         self.ljr_power = ljr_power
         self.lj_rmins = np.load(str(Path(__file__).parent / "lj_rmins.npy")) * ljr_scale
+        self.lj_rmins[self.lj_rmins < 1.0] = 1.0
         self.ljr_ratio = ljr_ratio
         self.energy_ratio = energy_ratio
         self.element_energy = [-10000, -3.392726045, -0.00905951, -1.9089228666666667, -3.739412865, -6.679391770833334,
@@ -33,7 +34,7 @@ class Energy(torch.nn.Module):
                                 -9.27440254, -7.36430787, -5.17988181, -2.8325560033333335, -0.92288976, -2.75168373, -4.009571855, 
                                 -4.12900124, -3.1433058933333338, -1.524012615, -0.03617417, -0.8954023720689656, -1.91897494, 
                                 -4.936007105, -5.933089155, -4.780905755, -4.7681474325, -4.7505423225, -4.718586135, -10.2570018, 
-                                -14.07612224, -4.6343661, -4.60678684, -4.58240887, -4.56771881, -4.475835423333334, 999, -4.52095052, 
+                                -14.07612224, -4.6343661, -4.60678684, -4.58240887, -4.56771881, -4.475835423333334, -10000, -4.52095052, 
                                 -9.95718903, -11.85777763, -12.95813023, -12.444527185, -11.22736743, -8.83843418, -6.07113332, -3.273882, 
                                 -0.303680365, -2.3626431466666666, -3.71264707, -3.89003431, -10000, -10000, -10000, -10000, -10000, -4.1211750075, 
                                 -7.41385825, -9.51466466, -11.29141001, -12.94777968125, -14.26783833, -10000, -10000, -10000, -10000, -10000, -10000]
@@ -107,7 +108,7 @@ class Energy(torch.nn.Module):
         return self.energy_ratio * model_output["potential_energy"] + self.ljr_ratio * ljr, model_output["potential_energy"], torch.zeros(len(model_output['potential_energy']), 1).to(ljr.device), ljr
 
 class EnergyAndUncertainty(Energy):
-    def __init__(self, normalize=True, energy_ratio=1.0, ljr_ratio=1, ljr_power=12, ljr_scale=.8, uncertainty_ratio=.25):
+    def __init__(self, normalize=True, energy_ratio=1.0, ljr_ratio=1, ljr_power=12, ljr_scale=.8, uncertainty_ratio=.25, min_ljr_val=1.0):
         """
         Initialize objective function using energy and uncertainty as novel loss
         Args:
@@ -118,7 +119,7 @@ class EnergyAndUncertainty(Energy):
             ljr_scale (float): Scaling factor for the Lennard-Jones repulsion
             uncertainty_ratio (float): Weight of the uncertainty in the loss
         """
-        super().__init__(normalize, energy_ratio, ljr_ratio, ljr_power, ljr_scale)
+        super().__init__(normalize, energy_ratio, ljr_ratio, ljr_power, ljr_scale, min_ljr_val)
         self.uncertainty_ratio = uncertainty_ratio
     
     def forward(self, model_output, batch):
@@ -144,7 +145,7 @@ class EnergyAndUncertainty(Energy):
 
 
 class EmbeddingDistance(Energy):
-    def __init__(self, embeddings, normalize=True, energy_ratio=1.0, ljr_ratio=1, ljr_power=12, ljr_scale=.8, embedding_ratio=.1, mode="min"):
+    def __init__(self, embeddings, normalize=True, energy_ratio=1.0, ljr_ratio=1, ljr_power=12, ljr_scale=.8, min_ljr_val=1.0, embedding_ratio=.1, mode="min"):
         """
         Initialize objective function using only energy and embedding distance as novel loss
             embedding distance is aggregated euclidean distance between structure embedding and database embeddings
@@ -158,7 +159,7 @@ class EmbeddingDistance(Energy):
             embedding_ratio (float): Weight of the embedding distance in the loss
             mode (str): Aggregation mode for the embedding distance, either "min" or "mean"
         """
-        super().__init__(normalize, energy_ratio, ljr_ratio, ljr_power, ljr_scale)
+        super().__init__(normalize, energy_ratio, ljr_ratio, ljr_power, ljr_scale, min_ljr_val)
         self.embedding_ratio = embedding_ratio
         self.embeddings = embeddings
         self.mode = mode

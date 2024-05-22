@@ -327,18 +327,18 @@ class MDL_FF(ForceField):
         for i in range(len(loader_iter)):
             batch = next(loader_iter).to(device)
             out = self._forward(batch, forces=True)
-            forces.append(out['forces'])
-            stress.append(out['stress'])
+            forces.append(out['forces'].cpu().detach())
+            stress.append(out['stress'].cpu().detach())
             print('Structures', temp, 'to', temp + len(batch) - 1, 'took', time.time() - start_time)
             temp += len(batch)
             start_time = time.time()
-        per_atom_forces = torch.cat(forces, dim=1).cpu().detach().numpy()
+        per_atom_forces = torch.cat(forces, dim=-2).numpy()
         per_struc_forces = []
         temp = 0
         for i in range(len(data_list)):
             per_struc_forces.append(per_atom_forces[temp:temp + data_list[i].n_atoms])
             temp += data_list[i].n_atoms
-        stress = torch.cat(stress, dim=1).cpu().detach().numpy()
+        stress = torch.cat(stress, dim=0).numpy()
         return per_struc_forces, stress
         
     def create_ase_calc(self):
@@ -416,10 +416,10 @@ class MDL_FF(ForceField):
                 curr_time = time.time() - start_time
                 if log_per > 0 and step[0] % log_per == 0:                
                     if cell_relax:    
-                        print("Structure ID: {}, Step: {}, LJR Loss: {:.6f}, Pos Gradient: {:.6f}, Cell Gradient: {:.6f}, Time: {:.6f}".format(len(batch.structure_id), 
+                        print("Structure ID: {}, Step: {}, Objective Loss: {:.6f}, Pos Gradient: {:.6f}, Cell Gradient: {:.6f}, Time: {:.6f}".format(len(batch.structure_id), 
                         step[0], objective_loss.mean().item(), pos.grad.abs().mean().item(), cell.grad.abs().mean().item(), curr_time))
                     else:
-                        print("Structure ID: {}, Step: {}, LJR Loss: {:.6f}, Pos Gradient: {:.6f}, Time: {:.6f}".format(len(batch.structure_id), 
+                        print("Structure ID: {}, Step: {}, Objective Loss: {:.6f}, Pos Gradient: {:.6f}, Time: {:.6f}".format(len(batch.structure_id), 
                         step[0], objective_loss.mean().item(), pos.grad.abs().mean().item(), curr_time))
                 step[0] += 1
                 batch.pos, batch.cell = pos, cell
