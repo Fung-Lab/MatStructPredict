@@ -1,9 +1,9 @@
 import sys
 from msp.dataset import download_dataset, load_dataset, combine_dataset, update_dataset
-from msp.composition import generate_random_compositions, sample_random_composition
+from msp.composition import generate_random_compositions, sample_random_composition, generate_random_lithium_compositions
 from msp.forcefield import MDL_FF, MACE_FF, M3GNet_FF
 from msp.optimizer.globalopt.basin_hopping import BasinHoppingASE, BasinHoppingBatch
-from msp.utils.objectives import EnergyAndUncertainty, Energy, Uncertainty, EmbeddingDistance
+from msp.utils.objectives import EnergyAndUncertainty, Energy, EmbeddingDistance
 from msp.structure.structure_util import dict_to_atoms, init_structure, atoms_to_dict
 from msp.validate import read_dft_config, setup_DFT, Validate
 import pickle as pkl
@@ -14,6 +14,7 @@ import torch
 from ase import io
 from pymatgen.analysis.structure_matcher import StructureMatcher
 from pymatgen.io.ase import AseAtomsAdaptor
+import time
 
 import matplotlib.pyplot  as plt
 
@@ -23,18 +24,20 @@ my_dataset = download_dataset(repo="MP", save=True)
 #or load dataset from disk:
 
 #my_dataset = load_dataset(path ="path/to/dataset")
-my_dataset = json.load(open("../data/data_subset_msp.json", "r"))
+my_dataset = json.load(open("/global/cfs/projectdirs/m3641/Shared/Materials_datasets/MP_data_latest/raw/data.json", "r"))
+predicted_structures = []
+# my_dataset = json.load(open("../data/data_subset_msp.json", "r"))
 #print(my_dataset[0])
 max_iterations=1
 
 #Initialize a forcefield class, reading in from config (we use MDL_FF but it can be a force field from another library)
 train_config = 'mdl_config.yml'
 forcefield = MDL_FF(train_config, my_dataset)
-embeddings = forcefield.get_embeddings(my_dataset, batch_size=64, cluster=False)
+embeddings = forcefield.get_embeddings(my_dataset, batch_size=40, cluster=False)
 
 #predictor = BasinHoppingASE(forcefield, hops=5, steps=100, optimizer="FIRE", dr=0.5)
 
-predictor_batch = BasinHoppingBatch(forcefield, hops=20, steps=100, dr=0.6, optimizer='Adam', batch_size=30, perturbs=['pos', 'cell'])
+predictor_batch = BasinHoppingBatch(forcefield, hops=10, steps=100, dr=0.6, optimizer='Adam', perturbs=['pos', 'cell'])
 
 
 # forcefield_mace = MACE_FF()
@@ -55,11 +58,20 @@ for i in range(0, max_iterations):
     # compositions = sample_random_composition(dataset=my_dataset, n=1)
     # or manually specify the list of lists:
     # compositions = [[22, 22, 22, 22, 22, 22, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8] for _ in range(8)]
-    compositions = generate_random_compositions(my_dataset, n=8, max_elements=5, max_atoms=20)
-    for comp in compositions:
-        print(comp)
-    initial_structures = [init_structure(c, pyxtal=True) for c in compositions]
-    read_structure = ase.io.read("init.cif")
+
+    if i != 0:
+        forcefield.update(predicted_structures, 1, 0, 0, max_epochs=30, save_model=False)
+
+    # compositions = generate_random_compositions(my_dataset, n=8, max_elements=5, max_atoms=20)
+    compositions_novelty = generate_random_lithium_compositions(my_dataset, n=16000)
+    initial_structures_novelty = [init_structure(c, pyxtal=True) for c in compositions_novelty]
+    # compositions_energy = generate_random_lithium_compositions(my_dataset, n=4000)
+    # initial_structures_energy = [init_structure(c, pyxtal=True) for c in compositions_energy]
+    # for j, minima in enumerate(dict_to_atoms(initial_structures)):
+    #     filename = "initial_iteration_"+str(i)+"_structure_"+str(j)+".cif"
+    #     ase.io.write(filename, minima)
+    # read_structure = ase.io.read("init.cif")
+
     # initial_structures=[atoms_to_dict([read_structure], loss=[None])]
 
     #forcefield itself is not an ase calculator, but can be used to return the MDLCalculator class
@@ -84,30 +96,71 @@ for i in range(0, max_iterations):
     #---Optimizing a batch of structures with batch basin hopping---
     # alternatively if we dont use ASE, we can optimize in batch, and optimize over multiple objectives as well
     # we do this by first initializing our objective function, which is similar to the loss function class in matdeeplearn
-    # objective_func = UpperConfidenceBound(c=0.1)
-    # objective_func = Energy(normalize=True, ljr_ratio=1)
-    objective_func = EmbeddingDistance(embeddings, normalize=True, energy_ratio=1, ljr_ratio=1, ljr_scale=.7, embedding_ratio=.1)
-    #objective_func = EnergyAndUncertainty(normalize=True, uncertainty_ratio=.5, ljr_ratio=100)
-    total_list_batch, minima_list_batch, best_hop, energies, accepts, accept_rate, temps, step_sizes = predictor_batch.predict(initial_structures, objective_func, batch_size=32, log_per=5, lr=.05)
-    minima_list_batch = dict_to_atoms(minima_list_batch)
-    for j, minima in enumerate(minima_list_batch):
-        filename = "iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
+    # objective_func_energy = Energy(normalize=True, ljr_ratio=1)
+    objective_func_novelty = EmbeddingDistance(embeddings, normalize=True, energy_ratio=5, ljr_ratio=1, ljr_scale=.7, embedding_ratio=.1)
+    # objective_func = EnergyAndUncertainty(normalize=True, uncertainty_ratio=.25, ljr_ratio=1, ljr_scale=.7)
+    # start_time = time.time()
+    # total_list_batch, minima_list_batch, best_hop, energies, accepts, accept_rate, temps, step_sizes = predictor_batch.predict(initial_structures_energy, objective_func_energy, batch_size=8, log_per=0, lr=.05)
+    # top_energy = sorted(minima_list_batch, key=lambda struc: struc['objective_loss'])[:100]
+    # print('---------TOP 100 ENERGY STRUCTURES---------')
+    # print(top_energy)
+    # print('---------TOP 100 ENERGY STRUCTURES---------')
+    # minima_list_batch_ase = dict_to_atoms(minima_list_batch)
+    # top_energy_ase = dict_to_atoms(top_energy)
+    # for j, minima in enumerate(minima_list_batch_ase):
+    #     filename = "all_4k_energy/iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
+    #     ase.io.write(filename, minima)
+    # for j, minima in enumerate(top_energy_ase):
+    #     filename = "top_100_energy/iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
+    #     ase.io.write(filename, minima)
+    # f = open('output.txt', 'w')
+    # for i in range(len(total_list_batch)):
+    #     f.write('Structure ' + str(i) + '\n')
+    #     f.write('\tbest_hop: ' + str(best_hop[j]) + '\n')
+    #     for hop in total_list_batch[i]:
+    #         f.write("\tHop: " +str(hop['hop'])+ '\n')
+    #         f.write("\t\tObjective loss: " +str(hop['objective_loss'])+ '\n')
+    #         f.write("\t\tEnergy loss: "+str(hop['energy_loss'])+'\n')
+    #         if getattr(objective_func_energy, 'normalize', False):
+    #             f.write("\t\tUnnormalized energy loss: " +str(hop['unnormalized_loss'])+ '\n')
+    #         f.write("\t\tNovel loss: "+str(hop['novel_loss']) + '\n')
+    #         f.write("\t\tSoft sphere loss: "+ str(hop['soft_sphere_loss']) + '\n')
+    #         f.write("\t\tComposition: " +str(hop['composition'])+ '\n')
+    #         f.write("\t\tperturb: " +str(hop['perturb'])+ '\n')
+    # f.close()
+    # print('Time taken for energy: {:.2f}'.format(time.time() - start_time))
+
+    start_time = time.time()
+    total_list_batch, minima_list_batch, best_hop, energies, accepts, accept_rate, temps, step_sizes = predictor_batch.predict(initial_structures_novelty, objective_func_novelty, batch_size=8, log_per=0, lr=.05)
+    top_novelty = sorted(minima_list_batch, key=lambda struc: struc['objective_loss'])[:400]
+    print('---------TOP 400 NOVELTY STRUCTURES---------')
+    print(top_novelty)
+    print('---------TOP 400 NOVELTY STRUCTURES---------')
+    minima_list_batch_ase = dict_to_atoms(minima_list_batch)
+    top_novelty_ase = dict_to_atoms(top_novelty)
+    for j, minima in enumerate(minima_list_batch_ase):
+        filename = "all_16k_novelty_5/iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
         ase.io.write(filename, minima)
-    f = open('output.txt', 'w')
-    for i in range(len(total_list_batch)):
-        f.write('Structure ' + str(i) + '\n')
-        f.write('\tbest_hop: ' + str(best_hop[j]) + '\n')
-        for hop in total_list_batch[i]:
-            f.write("\tHop: " +str(hop['hop'])+ '\n')
-            f.write("\t\tObjective loss: " +str(hop['objective_loss'])+ '\n')
-            f.write("\t\tEnergy loss: "+str(hop['energy_loss'])+'\n')
-            if getattr(objective_func, 'normalize', False):
-                f.write("\t\tUnnormalized energy loss: " +str(hop['unnormalized_loss'])+ '\n')
-            f.write("\t\tNovel loss: "+str(hop['novel_loss']) + '\n')
-            f.write("\t\tSoft sphere loss: "+ str(hop['soft_sphere_loss']) + '\n')
-            f.write("\t\tComposition: " +str(hop['composition'])+ '\n')
-            f.write("\t\tperturb: " +str(hop['perturb'])+ '\n')
-    f.close()
+    for j, minima in enumerate(top_novelty_ase):
+        filename = "top_400_novelty_5/iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
+        ase.io.write(filename, minima)
+    # f = open('output.txt', 'w')
+    # for i in range(len(total_list_batch)):
+    #     f.write('Structure ' + str(i) + '\n')
+    #     f.write('\tbest_hop: ' + str(best_hop[j]) + '\n')
+    #     for hop in total_list_batch[i]:
+    #         f.write("\tHop: " +str(hop['hop'])+ '\n')
+    #         f.write("\t\tObjective loss: " +str(hop['objective_loss'])+ '\n')
+    #         f.write("\t\tEnergy loss: "+str(hop['energy_loss'])+'\n')
+    #         if getattr(objective_func_novelty, 'normalize', False):
+    #             f.write("\t\tUnnormalized energy loss: " +str(hop['unnormalized_loss'])+ '\n')
+    #         f.write("\t\tNovel loss: "+str(hop['novel_loss']) + '\n')
+    #         f.write("\t\tSoft sphere loss: "+ str(hop['soft_sphere_loss']) + '\n')
+    #         f.write("\t\tComposition: " +str(hop['composition'])+ '\n')
+    #         f.write("\t\tperturb: " +str(hop['perturb'])+ '\n')
+    # f.close()
+    print('Time taken for novelty: {:.2f}'.format(time.time() - start_time))
+
     for i, energy_list in enumerate(energies):
         plt.scatter(range(len(energy_list)), energy_list, label=f'Structure {i + 1}',
                     color=['g' if a else 'r' for a in accepts[i]])
@@ -207,6 +260,6 @@ for i in range(0, max_iterations):
     
     
     #update the dataset as well
-    update_dataset(repo="MP", data=dft_results)
+    predicted_structures.extend(minima_list_batch)
 
 print("Job done")
