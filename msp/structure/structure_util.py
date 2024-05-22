@@ -115,7 +115,6 @@ def substitution_discovery(templates):
             if e not in unique:
                 unique.append(e)
         
-        # check this method
         for n, u in enumerate(unique):
             flattened_u = chain(*u)
             unique[n] = Atoms(flattened_u)
