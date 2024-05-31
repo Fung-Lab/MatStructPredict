@@ -97,7 +97,7 @@ for i in range(0, max_iterations):
     # alternatively if we dont use ASE, we can optimize in batch, and optimize over multiple objectives as well
     # we do this by first initializing our objective function, which is similar to the loss function class in matdeeplearn
     # objective_func_energy = Energy(normalize=True, ljr_ratio=1)
-    objective_func_novelty = EmbeddingDistance(embeddings, normalize=True, energy_ratio=5, ljr_ratio=1, ljr_scale=.7, embedding_ratio=.1)
+    objective_func_novelty = EmbeddingDistance(embeddings, normalize=True, energy_ratio=2, ljr_ratio=1, ljr_scale=.7, embedding_ratio=.1)
     # objective_func = EnergyAndUncertainty(normalize=True, uncertainty_ratio=.25, ljr_ratio=1, ljr_scale=.7)
     # start_time = time.time()
     # total_list_batch, minima_list_batch, best_hop, energies, accepts, accept_rate, temps, step_sizes = predictor_batch.predict(initial_structures_energy, objective_func_energy, batch_size=8, log_per=0, lr=.05)
@@ -139,10 +139,10 @@ for i in range(0, max_iterations):
     minima_list_batch_ase = dict_to_atoms(minima_list_batch)
     top_novelty_ase = dict_to_atoms(top_novelty)
     for j, minima in enumerate(minima_list_batch_ase):
-        filename = "all_16k_novelty_5/iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
+        filename = "all_16k_novelty_2/iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
         ase.io.write(filename, minima)
     for j, minima in enumerate(top_novelty_ase):
-        filename = "top_400_novelty_5/iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
+        filename = "top_400_novelty_2/iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
         ase.io.write(filename, minima)
     # f = open('output.txt', 'w')
     # for i in range(len(total_list_batch)):

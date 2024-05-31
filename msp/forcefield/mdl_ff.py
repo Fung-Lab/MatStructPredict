@@ -164,7 +164,7 @@ class MDL_FF(ForceField):
             if 'forces' in struc and struc['forces'] is not None:
                 data.forces = torch.tensor(struc['forces'])
             if 'stress' in struc and struc['stress'] is not None:
-                data.stress = torch.tensor(struc['stress'])
+                data.stress = torch.tensor(struc['stress']).unsqueeze(0)
             #optional
             data.u = torch.tensor(np.zeros((3))[np.newaxis, ...]).float()
             if 'potential_energy' in struc:
