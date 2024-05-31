@@ -11,6 +11,11 @@ import ase.io
 import json
 import torch
 import os
+import sys
+from ase.constraints import FixAtoms
+
+#file = open('larger_perturbations_console_output_new.txt', 'w')
+#sys.stdout = file
 
 my_dataset = json.load(open("data/data_subset_msp.json", "r"))
 train_config = 'scripts/config.yml'
@@ -21,22 +26,22 @@ checkpoint_path = "data/best_checkpoint.pt"
 forcefield.load_saved_model(checkpoint_path)
 
 atoms = read("data/initial2.cif")
-print(atoms)
-max_iterations = 5
+print(atoms, flush=True)
+max_iterations = 1
 
-print(id(atoms), id(atoms))
-print(atoms)
-predictor = BasinHoppingCatalyst(forcefield=forcefield, hops=100, steps=100, optimizer="Adam", dr=0.5, max_atom_num=1000, radius=1, elems_to_sample=[78])
+#print(id(atoms), id(atoms))
+#print(atoms)
+predictor = BasinHoppingCatalyst(forcefield=forcefield, hops=20, steps=100, optimizer="Adam", dr=0.5, max_atom_num=1000, radius=1, elems_to_sample=[78])
 objective_func = Energy(normalize=True)
 
 for i in range(max_iterations):
-    print(id(atoms), id(atoms))
+    #print(id(atoms), id(atoms))
     compositions = [atoms.get_chemical_formula()]
-    print("compositions:", compositions)
+    print("compositions:", compositions, flush=True)
     res, minima_list, best_hop = predictor.predict([atoms], objective_func, batch_size=1)
-    print("minima list is", minima_list, " with length ", len(minima_list))
-    print(type(minima_list))
-    print(minima_list[0].get_chemical_formula())
+    print("minima list is", minima_list, " with length ", len(minima_list), flush=True)
+    #print(type(minima_list))
+    print("minima_list[0]: ", minima_list[0].get_chemical_formula(), flush=True)
 
     dft_path = 'path/to/dft_config.yml'
     dft_config = read_dft_config(dft_path)
@@ -45,10 +50,10 @@ for i in range(max_iterations):
     dft_results = []
     for atom in minima_list:
         dft_results.append(validator(atom))
-    filename = f"iteration_{i}_structure_0_mdl.cif"
+    filename = f"larger_perturbations_new.cif"
     ase.io.write(filename, minima_list[0])
 
-    print("dft results:", dft_results)
+    print("dft results:", dft_results, flush=True)
     update_dataset(repo="MP", data=dft_results)
 
 print("Job done")

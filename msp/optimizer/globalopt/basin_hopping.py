@@ -394,6 +394,7 @@ class BasinHoppingCatalyst:
             print("Removed atom at index", idx)
         else:
             print("No catalyst atoms found to remove")
+
     def perturbPos(self, atoms, **kwargs):
         print("attempting to perturb")
         print("atoms: ", atoms)
@@ -402,17 +403,64 @@ class BasinHoppingCatalyst:
         catalyst_indices = [i for i, atom in enumerate(atoms) if atom.number == self.catalyst_elem]
         print("catalyst indices are : ", catalyst_indices)
         if catalyst_indices:
+            """
             print("perturbing")
             
-            idx = np.random.choice(catalyst_indices)
-            pos = atoms.positions[idx]
-            print("old position is ", pos)
-            pos += np.random.uniform(-self.dr, self.dr, size=3)  # Change size to (3,)
-            pos[2] = atoms.positions[:, 2].max()  # Ensure the perturbed atom stays on the surface
-            atoms.positions[idx] = pos
-            print("new position is ", pos)
-
-    def predict(self, structures, objective_func, cell_relax=True, topk=1, batch_size=4, log_per=0, lr=.05, density=.2):
+            for idx in catalyst_indices:
+                pos = atoms.positions[idx]
+                print(f"old position of atom {idx} is ", pos)
+                pos += np.random.uniform(-self.dr, self.dr, size=3)  # Change size to (3,)
+                pos[2] = atoms.positions[:, 2].max()  # Ensure the perturbed atom stays on the surface
+                atoms.positions[idx] = pos
+                print(f"new position of atom {idx} is ", pos)
+            """
+            print("perturbing")
+            
+            """
+            perturb_range_x = 1
+            perturb_range_y = 1
+            perturb_range_z = 0.5
+            
+            for idx in catalyst_indices:
+                pos = atoms.positions[idx]
+                print(f"old position of atom {idx} is ", pos)
+                
+                perturbation = np.random.uniform(-1, 1, size=3)
+                perturbation[0] *= perturb_range_x
+                perturbation[1] *= perturb_range_y
+                perturbation[2] *= perturb_range_z
+                
+                pos += perturbation
+                pos[2] = max(atoms.positions[:, 2].max(), pos[2])  # Ensure the perturbed atom stays on or above the surface
+                atoms.positions[idx] = pos
+                print(f"new position of atom {idx} is ", pos)
+            """
+            non_catalyst_atoms = [atom for atom in atoms if atom.number != self.catalyst_elem]
+            non_catalyst_z_coords = [atom.position[2] for atom in non_catalyst_atoms]
+            max_non_catalyst_z = max(non_catalyst_z_coords) if non_catalyst_z_coords else 0
+            perturb_range_x = 2
+            perturb_range_y = 2
+            perturb_range_z = 1
+            for idx in catalyst_indices:
+                pos = atoms.positions[idx]
+                print(f"old position of atom {idx} is ", pos)
+                
+                perturbation = np.random.uniform(-1, 1, size=3)
+                perturbation[0] *= perturb_range_x
+                perturbation[1] *= perturb_range_y
+                perturbation[2] *= perturb_range_z
+                #print("Initial Position:", pos)
+                #print("Perturbation:", perturbation)
+                new_pos = pos + perturbation
+                new_pos = np.maximum(0, new_pos) # make sure nonnegative
+                # Ensure the perturbed Pt atom stays above the maximum z-coordinate of non-Pt atoms
+                #print("New Position After Clipping:", new_pos)
+                new_pos[2] = max(max_non_catalyst_z, new_pos[2])
+                
+                atoms.positions[idx] = new_pos
+                print(f"new position of atom {idx} is ", new_pos)
+                np.all(new_pos >= 0)
+    def predict(self, structures, objective_func, cell_relax=False, topk=1, batch_size=4, log_per=0, lr=.05, density=.2):
         new_atoms = deepcopy(structures)
         min_atoms = deepcopy(new_atoms)
         min_loss = [1e10] * len(min_atoms)
@@ -421,8 +469,36 @@ class BasinHoppingCatalyst:
         for _ in range(len(min_atoms)):
             res.append([])
         for i in range(self.hops):
+
+            batch_masks = []
+            for batch_atoms in new_atoms:
+                num_atoms = len(batch_atoms)
+                mask = torch.ones(num_atoms, dtype=torch.bool)
+                # Set the mask to False for non-Pt atoms and atoms in the bottom layers
+                num_layers = 2  # Number of top layers to keep unfixed
+                non_catalyst_atoms = [atom for atom in batch_atoms if atom.number != self.catalyst_elem]
+                non_catalyst_z_coords = [atom.position[2] for atom in non_catalyst_atoms]
+                z_coordinates = np.array([atom.position[2] for atom in batch_atoms])
+
+                # Get unique z-coordinates and the inverse indices
+                unique_z, inverse_indices = np.unique(z_coordinates, return_inverse=True)
+                layer_atoms = inverse_indices
+                bottom_layers = unique_z[:-num_layers]
+                sorted_z_coordinates = np.sort(z_coordinates)
+                cutoff_index = int(0.95 * num_atoms)
+                cutoff_z = sorted_z_coordinates[cutoff_index]
+
+                #print(sorted(unique_z))
+                for index, atom in enumerate(batch_atoms):
+                    if atom.number != self.catalyst_elem or atom.position[2] <= cutoff_z:
+                        mask[index] = False
+                print("mask for ", batch_atoms, " is ", mask)
+                batch_masks.append(mask)
+            
             start_time = time()
-            new_atoms, new_loss, prev_loss = self.forcefield.optimize(new_atoms, self.steps, objective_func, log_per, lr, batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer)
+            #new_atoms, new_loss, prev_loss = self.forcefield.optimize(new_atoms, self.steps, objective_func, log_per, lr, batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer)
+            new_atoms, new_loss, prev_loss = self.forcefield.optimize(new_atoms, self.steps, objective_func, log_per, lr, batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer, fixed_atoms=batch_masks)
+
             end_time = time()
             for j in range(len(new_atoms)):
                 print(f"Hop {i}, Structure {j}: {new_atoms[j].get_chemical_formula()}")  # Debugging print statement

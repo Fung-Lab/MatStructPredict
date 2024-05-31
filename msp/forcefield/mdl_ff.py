@@ -217,7 +217,7 @@ class MDL_FF(ForceField):
         calculator = MDLCalculator(config=self.train_config)        
         return calculator
 
-    def optimize(self, atoms, steps, objective_func, log_per, learning_rate, num_structures=-1, batch_size=4, device='cpu', cell_relax=True, optim='Adam'):
+    def optimize(self, atoms, steps, objective_func, log_per, learning_rate, num_structures=-1, batch_size=4, device='cpu', cell_relax=True, optim='Adam', fixed_atoms=None):
         """
         Optimizes batches of structures using the force field model.
         Args:
@@ -258,10 +258,34 @@ class MDL_FF(ForceField):
             pos, cell = batch.pos, batch.cell
             #print("torch.optim: ", torch.optim)
             #print("optim: ", optim)
-            
-            opt = getattr(torch.optim, optim, 'Adam')([pos, cell], lr=learning_rate)
 
-            pos.requires_grad_(True)
+            print("fixed atoms: ")
+            print(type(fixed_atoms))
+            #print(fixed_atoms)
+
+            #print(fixed_atoms.size())
+            if fixed_atoms is not None:
+                if isinstance(fixed_atoms, list):
+                    mask = torch.zeros(batch.num_nodes, dtype=torch.bool, device=device)
+                    mask[fixed_atoms] = True
+                else:
+                    mask = fixed_atoms.to(device)
+            else:
+                mask = None
+
+            # Mask the position tensor
+            if mask is not None:
+                pos_masked = pos.clone()
+                pos_masked[~mask] = pos[~mask].detach()
+                pos_masked[~mask].requires_grad_(False)
+                fixed_atom_indices = mask.nonzero().squeeze()
+                print("Fixed atom indices:", fixed_atom_indices)
+            else:
+                pos_masked = pos
+            
+            opt = getattr(torch.optim, optim, 'Adam')([pos_masked, cell], lr=learning_rate)
+
+            pos_masked.requires_grad_(True)
             if cell_relax:
                 cell.requires_grad_(True)
 
@@ -279,7 +303,7 @@ class MDL_FF(ForceField):
                 if step[0] == 0:
                     temp[1] = loss
                 step[0] += 1
-                batch.pos, batch.cell = pos, cell
+                batch.pos, batch.cell = pos_masked, cell
                 temp[0] = loss
                 return loss.mean()
             for _ in range(steps):
