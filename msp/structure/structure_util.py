@@ -7,6 +7,8 @@ from ase.data import chemical_symbols, atomic_masses
 import smact
 from smact.screening import pauling_test
 import itertools
+from matdeeplearn.preprocessor.helpers import GaussianSmearing2D
+
 
 
 
@@ -148,6 +150,7 @@ def atoms_to_data(atoms):
     """
     n_structures = len(atoms)
     data_list = [Data() for _ in range(n_structures)]
+    gauss = GaussianSmearing2D(.35, .5, 100)
 
     for i, s in enumerate(atoms):
         data = s
@@ -163,6 +166,7 @@ def atoms_to_data(atoms):
         data_list[i].structure_id = [structure_id]  
         data_list[i].z = atomic_numbers
         data_list[i].u = torch.Tensor(np.zeros((3))[np.newaxis, ...])
+        data_list[i].gauss_atom_features = gauss(data_list[i].z)
 
     return data_list
 

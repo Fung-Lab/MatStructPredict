@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 import time as time
 from torch_scatter import scatter_add
+from matdeeplearn.preprocessor.helpers import GaussianSmearing2D
 
         
 class Energy(torch.nn.Module):
@@ -38,6 +39,7 @@ class Energy(torch.nn.Module):
                                 -9.95718903, -11.85777763, -12.95813023, -12.444527185, -11.22736743, -8.83843418, -6.07113332, -3.273882, 
                                 -0.303680365, -2.3626431466666666, -3.71264707, -3.89003431, -10000, -10000, -10000, -10000, -10000, -4.1211750075, 
                                 -7.41385825, -9.51466466, -11.29141001, -12.94777968125, -14.26783833, -10000, -10000, -10000, -10000, -10000, -10000]
+        self.gauss = GaussianSmearing2D(.35, .5, 100)
 
     def set_norm_offset(self, z, n_atoms):
         """
@@ -87,6 +89,21 @@ class Energy(torch.nn.Module):
         loss *= len(z)
         loss -= offset
         return loss
+    
+    def gaussian_loss(self, batch):
+        """
+        Calculate the Gaussian loss
+        Args:
+            batch (torch_geometric.data.Batch): Batch of data
+        Returns:
+            torch.Tensor: Gaussian loss
+        """
+        ideal_gauss_features = self.gauss(batch.z)
+        dist = torch.cdist(batch.gauss_atom_features, ideal_gauss_features, p=2)
+        temp = batch.gauss_atom_features
+        temp = -temp[temp < 0]
+        return torch.mean(dist) + temp.sum()
+        
 
     def forward(self, model_output, batch):
         """
@@ -105,7 +122,8 @@ class Energy(torch.nn.Module):
             # for i in range(len(batch.n_atoms)):
             #     model_output['potential_energy'][i] = (model_output['potential_energy'][i] + self.offset[i]) / batch.n_atoms[i]
         ljr = self.lj_repulsion(batch, power=self.ljr_power)
-        return self.energy_ratio * model_output["potential_energy"] + self.ljr_ratio * ljr, model_output["potential_energy"], torch.zeros(len(model_output['potential_energy']), 1).to(ljr.device), ljr
+        gauss_loss = self.gaussian_loss(batch)
+        return self.energy_ratio * model_output["potential_energy"] + self.ljr_ratio * ljr + gauss_loss, model_output["potential_energy"], torch.zeros(len(model_output['potential_energy']), 1).to(ljr.device), ljr
 
 class EnergyAndUncertainty(Energy):
     def __init__(self, normalize=True, energy_ratio=1.0, ljr_ratio=1, ljr_power=12, ljr_scale=.8, uncertainty_ratio=.25, min_ljr_val=1.0):

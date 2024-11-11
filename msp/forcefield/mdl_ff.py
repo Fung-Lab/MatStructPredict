@@ -21,6 +21,7 @@ from matdeeplearn.trainers.base_trainer import BaseTrainer
 from matdeeplearn.trainers.property_trainer import PropertyTrainer
 from matdeeplearn.common.data import dataset_split
 from msp.structure.structure_util import atoms_to_data, data_to_atoms
+from matdeeplearn.preprocessor.helpers import GaussianSmearing2D
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.metrics import silhouette_score
 from torch_scatter import scatter_mean
@@ -55,7 +56,7 @@ class MDL_FF(ForceField):
     
         
                     
-    def train(self, dataset, train_ratio, val_ratio, test_ratio, max_epochs=None, lr=None, batch_size=None, save_path='saved_model'):
+    def train(self, dataset, train_ratio, val_ratio, test_ratio, max_epochs=None, lr=None, batch_size=None, save_path='saved_model', save_model=True):
         """
         Train the force field model on the dataset.
         Args:
@@ -82,16 +83,17 @@ class MDL_FF(ForceField):
         self.trainer.train()
         
         #state = {"state_dict": self.model.state_dict()}
-        os.makedirs(save_path, exist_ok=True)
-        for i in range(len(self.trainer.model)):
-            sub_path = os.path.join(save_path, f"checkpoint_{i}",)        
-            os.makedirs(sub_path, exist_ok=True)        
-            if str(self.trainer.rank) not in ("cpu", "cuda"):
-                state = {"state_dict": self.trainer.model[i].module.state_dict()}         
-            else:   
-                state = {"state_dict": self.trainer.model[i].state_dict()}         
-            model_path = os.path.join(sub_path, "best_checkpoint.pt")  
-            torch.save(state, model_path)
+        if save_model:
+            os.makedirs(save_path, exist_ok=True)
+            for i in range(len(self.trainer.model)):
+                sub_path = os.path.join(save_path, f"checkpoint_{i}",)        
+                os.makedirs(sub_path, exist_ok=True)        
+                if str(self.trainer.rank) not in ("cpu", "cuda"):
+                    state = {"state_dict": self.trainer.model[i].module.state_dict()}         
+                else:   
+                    state = {"state_dict": self.trainer.model[i].state_dict()}         
+                model_path = os.path.join(sub_path, "best_checkpoint.pt")  
+                torch.save(state, model_path)
         gc.collect()
         torch.cuda.empty_cache()
         
@@ -137,6 +139,30 @@ class MDL_FF(ForceField):
                 torch.save(state, model_path)
         gc.collect()
         torch.cuda.empty_cache()
+    
+
+    def validate(self, dataset, val_ratio=1, batch_size=None):
+        """
+        Evaluate the force field model on the dataset.
+        Args:
+            dataset (dict): A dictionary of the dataset.
+            val_ratio (float): The ratio of the dataset to use for validation.
+            batch_size (int): The batch size for the model. Defaults to value in the training configuration file.
+        """
+        dataset = self.process_data(dataset)
+        dataset = dataset['full']
+        _, self.dataset["val"], _ = dataset_split(
+                    dataset,
+                    0,
+                    val_ratio,
+                    0,
+                )
+        self.update_trainer(self.dataset, batch_size=batch_size)
+        metrics = self.trainer.validate(split="val")
+        for i in range(len(metrics)):
+            print(f"Model {i} validation metrics: {metrics[i]['loss']}")
+        
+
             
     def process_data(self, dataset):
         """
@@ -148,6 +174,7 @@ class MDL_FF(ForceField):
         """
         #add tqdm
         new_data_list = [Data() for _ in range(len(dataset))]
+        gauss = GaussianSmearing2D(.35, .5, 100)
         for i, struc in enumerate(dataset):
             data = new_data_list[i]
             data.n_atoms = len(struc['atomic_numbers'])
@@ -155,7 +182,7 @@ class MDL_FF(ForceField):
             data.cell = torch.tensor(np.array(struc['cell']), dtype=torch.float).view(1, 3, 3).float()
             
             if (np.array(data.cell) == np.array([[0.0, 0.0, 0.0],[0.0, 0.0, 0.0],[0.0, 0.0, 0.0]])).all():
-                data.cell = torch.zeros((3,3)).unsqueeze(0)
+                data.cell = torch.zeros((3,3)).unsqueeze(0).unsqueeze(0)
             if 'structure_id' in struc:
                 data.structure_id = [struc['structure_id']]
             else:
@@ -167,6 +194,9 @@ class MDL_FF(ForceField):
                 data.stress = torch.tensor(struc['stress']).unsqueeze(0)
             #optional
             data.u = torch.tensor(np.zeros((3))[np.newaxis, ...]).float()
+
+            data.gauss_atom_features = gauss(data.z)
+
             if 'potential_energy' in struc:
                 data.y = torch.tensor(np.array([struc['potential_energy']])).float()
             if 'y' in struc:
@@ -394,13 +424,16 @@ class MDL_FF(ForceField):
             batch = next(loader_iter).to(device)
             objective_func.set_norm_offset(batch.z, batch.n_atoms)
             pos, cell = batch.pos, batch.cell
+            gauss_z = batch.gauss_atom_features
+            print(batch.z, "before optimization")
 
-            opt = getattr(torch.optim, optim, torch.optim.Adam)([pos, cell], lr=learning_rate)
+            opt = getattr(torch.optim, optim, torch.optim.Adam)([pos, cell, gauss_z], lr=learning_rate)
             lr_scheduler = ReduceLROnPlateau(opt, 'min', factor=0.8, patience=10)
 
             pos.requires_grad_(True)
             if cell_relax:
                 cell.requires_grad_(True)
+            gauss_z.requires_grad_(True)
 
             temp_obj = [0]
             temp_energy = [0]
@@ -416,14 +449,15 @@ class MDL_FF(ForceField):
                 curr_time = time.time() - start_time
                 if log_per > 0 and step[0] % log_per == 0:                
                     if cell_relax:    
-                        print("Structure ID: {}, Step: {}, Objective Loss: {:.6f}, Pos Gradient: {:.6f}, Cell Gradient: {:.6f}, Time: {:.6f}".format(len(batch.structure_id), 
-                        step[0], objective_loss.mean().item(), pos.grad.abs().mean().item(), cell.grad.abs().mean().item(), curr_time))
+                        print("Structure ID: {}, Step: {}, Objective Loss: {:.6f}, Pos Gradient: {:.6f}, Cell Gradient: {:.6f}, Z Gradient: {:.6f}, Time: {:.6f}".format(len(batch.structure_id), 
+                        step[0], objective_loss.mean().item(), pos.grad.abs().mean().item(), cell.grad.abs().mean().item(), gauss_z.grad.abs().mean().item(), curr_time))
                     else:
-                        print("Structure ID: {}, Step: {}, Objective Loss: {:.6f}, Pos Gradient: {:.6f}, Time: {:.6f}".format(len(batch.structure_id), 
-                        step[0], objective_loss.mean().item(), pos.grad.abs().mean().item(), curr_time))
+                        print("Structure ID: {}, Step: {}, Objective Loss: {:.6f}, Pos Gradient: {:.6f}, Z Gradient: {:.6f}, Time: {:.6f}".format(len(batch.structure_id), 
+                        step[0], objective_loss.mean().item(), pos.grad.abs().mean().item(), gauss_z.grad.abs().mean().item(), curr_time))
                 step[0] += 1
                 batch.pos, batch.cell = pos, cell
-                # batch.z = optimized_z
+                batch.gauss_atom_features = gauss_z
+                batch.z = gauss_z.argmax(dim=-1)
                 temp_obj[0] = objective_loss
                 temp_energy[0] = energy_loss
                 temp_novel[0] = novel_loss
@@ -434,13 +468,14 @@ class MDL_FF(ForceField):
                 old_step = step[0]
                 loss = opt.step(lambda: closure(step, temp_obj, temp_energy, temp_novel, temp_soft_sphere, batch))
                 lr_scheduler.step(loss)
-
+            batch.z = batch.gauss_atom_features.argmax(dim=-1)
             res_atoms.extend(data_to_atoms(batch))
             obj_loss.extend(temp_obj[0].cpu().detach().numpy())
             energy_loss.extend(temp_energy[0].cpu().detach().numpy())
             novel_loss.extend(temp_novel[0].cpu().detach().numpy())
             soft_sphere_loss.extend(temp_soft_sphere[0].cpu().detach().numpy())
-            batch.z = batch.z.type(torch.int64)
+            print(batch.gauss_atom_features)
+            print(batch.z, "after optimization")
         for i in range(len(self.trainer.model)):
             self.trainer.model[i].gradient = True           
 

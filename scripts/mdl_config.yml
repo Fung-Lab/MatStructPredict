@@ -5,15 +5,17 @@ task:
   identifier: my_train_job
   parallel: False
   # If seed is not set, then it will be random every time
-  seed: 200
+  seed: 
   # Defaults to run directory if not specified
   save_dir: mdl_training/
   # continue from a previous job
-  continue_job: True
+  continue_job: False
   # spefcify if the training state is loaded: epochs, learning rate, etc
   load_training_state: False
   # Path to the checkpoint.pt file
-  checkpoint_path: "../ensemble_model/torchmd-1/checkpoint_0/best_checkpoint.pt,../ensemble_model/torchmd-2/checkpoint_0/best_checkpoint.pt,../ensemble_model/torchmd-3/checkpoint_0/best_checkpoint.pt,../ensemble_model/torchmd-4/checkpoint_0/best_checkpoint.pt,../ensemble_model/torchmd-5/checkpoint_0/best_checkpoint.pt"
+  #checkpoint_path: "../ensemble_model/torchmd-1/checkpoint_0/best_checkpoint.pt,../ensemble_model/torchmd-2/checkpoint_0/best_checkpoint.pt,../ensemble_model/torchmd-3/checkpoint_0/best_checkpoint.pt,../ensemble_model/torchmd-4/checkpoint_0/best_checkpoint.pt,../ensemble_model/torchmd-5/checkpoint_0/best_checkpoint.pt"
+  #checkpoint_path: "/global/cfs/projectdirs/m3641/Rithwik/MatStructPredict/ensemble_model/torchmd-1/checkpoint_0/best_checkpoint.pt,/global/cfs/projectdirs/m3641/Rithwik/MatStructPredict/ensemble_model/torchmd-2/checkpoint_0/best_checkpoint.pt,/global/cfs/projectdirs/m3641/Rithwik/MatStructPredict/ensemble_model/torchmd-3/checkpoint_0/best_checkpoint.pt,/global/cfs/projectdirs/m3641/Rithwik/MatStructPredict/ensemble_model/torchmd-4/checkpoint_0/best_checkpoint.pt,/global/cfs/projectdirs/m3641/Rithwik/MatStructPredict/ensemble_model/torchmd-5/checkpoint_0/best_checkpoint.pt"
+  #checkpoint_path: "/global/cfs/projectdirs/m3641/Rithwik/MatStructPredict/scripts/fine_tuned_models/checkpoint_0/best_checkpoint.pt,/global/cfs/projectdirs/m3641/Rithwik/MatStructPredict/scripts/fine_tuned_models/checkpoint_1/best_checkpoint.pt,/global/cfs/projectdirs/m3641/Rithwik/MatStructPredict/scripts/fine_tuned_models/checkpoint_2/best_checkpoint.pt,/global/cfs/projectdirs/m3641/Rithwik/MatStructPredict/scripts/fine_tuned_models/checkpoint_3/best_checkpoint.pt,/global/cfs/projectdirs/m3641/Rithwik/MatStructPredict/scripts/fine_tuned_models/checkpoint_4/best_checkpoint.pt"
   #checkpoint_path: "../pretrained_models/best_checkpoint.pt"
   #checkpoint_path: "../ensemble_model/torchmd-1/checkpoint_0/best_checkpoint.pt"
   # Whether to write predictions to csv file. E.g. ["train", "val", "test"]
@@ -21,7 +23,7 @@ task:
   # Frequency of writing to file; 0 denotes writing only at the end, 1 denotes writing every time
   output_frequency: 1
   # Frequency of saving model .pt file; 0 denotes saving only at the end, 1 denotes saving every time, -1 denotes never saving; this controls both checkpoint and best_checkpoint
-  model_save_frequency: 1
+  model_save_frequency: -1
   # Specify if labels are provided for the predict task
   # labels: True
   # Use amp mixed precision
@@ -53,16 +55,17 @@ model:
   model_ensemble: 5
 
 optim:
-  max_epochs: 5
+  max_epochs: 30
   max_checkpoint_epochs: 0
-  lr: 0.00001
+  lr: 0.0001
   # Either custom or from torch.nn.functional library. If from torch, loss_type is TorchLossWrapper
   loss:
     loss_type: ForceStressLoss
-    loss_args: {weight_energy: 0.01, weight_force: 50.0, weight_stress: 50.0}
+    loss_args: {weight_energy: 0.01, weight_force: 50.0, weight_stress: 0.0}
+    #loss_args: {weight_energy: 0, weight_force: 50.0, weight_stress: 0}
   # gradient clipping value
   clip_grad_norm: 10       
-  batch_size: 32
+  batch_size: 12
   optimizer:
     optimizer_type: AdamW
     optimizer_args: {}
@@ -80,7 +83,8 @@ dataset:
   processed: False
   # Path to data files - this can either be in the form of a string denoting a single path or a dictionary of {train: train_path, val: val_path, test: test_path, predict: predict_path}
   #src: data/data_subset_msp.json
-  src: /global/cfs/projectdirs/m3641/Shared/Materials_datasets/MP_data_forces/raw/data_subset_mdl_test.json
+  #src: /global/cfs/projectdirs/m3641/Shared/Materials_datasets/MP_data_forces/raw/data_subset_mdl_test.json
+  src: /global/cfs/projectdirs/m3641/Rithwik/MatStructPredict/data/iter_one_structures/data.json
   # Path to target file within data_path - this can either be in the form of a string denoting a single path or a dictionary of {train: train_path, val: val_path, test: test_path} or left blank when the dataset is a single json file
   # Example: target_path: "data/raw_graph_scalar/targets.csv"
   target_path: 
@@ -128,7 +132,8 @@ dataset:
     self_loop: True
     # Method of obtaining atom dictionary: available: (onehot)
     node_representation: onehot  
-    all_neighbors: True  
+    all_neighbors: True
+    
   # Number of workers for dataloader, see https://pytorch.org/docs/stable/data.html
   num_workers: 0
   # Where the dataset is loaded; either "cpu" or "cuda"

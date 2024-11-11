@@ -31,13 +31,13 @@ predicted_structures = []
 max_iterations=1
 
 #Initialize a forcefield class, reading in from config (we use MDL_FF but it can be a force field from another library)
-train_config = 'mdl_config.yml'
+train_config = 'optimize_z.yml'
 forcefield = MDL_FF(train_config, my_dataset)
 embeddings = forcefield.get_embeddings(my_dataset, batch_size=40, cluster=False)
 
 #predictor = BasinHoppingASE(forcefield, hops=5, steps=100, optimizer="FIRE", dr=0.5)
 
-predictor_batch = BasinHoppingBatch(forcefield, hops=10, steps=100, dr=0.6, optimizer='Adam', perturbs=['pos', 'cell'])
+predictor_batch = BasinHoppingBatch(forcefield, hops=50, steps=100, dr=0.6, optimizer='Adam', perturbs=['pos', 'cell'])
 
 
 # forcefield_mace = MACE_FF()
@@ -63,13 +63,13 @@ for i in range(0, max_iterations):
         forcefield.update(predicted_structures, 1, 0, 0, max_epochs=30, save_model=False)
 
     # compositions = generate_random_compositions(my_dataset, n=8, max_elements=5, max_atoms=20)
-    compositions_novelty = generate_random_lithium_compositions(my_dataset, n=16000)
-    initial_structures_novelty = [init_structure(c, pyxtal=True) for c in compositions_novelty]
+    compositions_novelty = generate_random_lithium_compositions(my_dataset, n=10)
+    initial_structures_novelty = [init_structure(c, pyxtal=False) for c in compositions_novelty]
     # compositions_energy = generate_random_lithium_compositions(my_dataset, n=4000)
     # initial_structures_energy = [init_structure(c, pyxtal=True) for c in compositions_energy]
-    # for j, minima in enumerate(dict_to_atoms(initial_structures)):
-    #     filename = "initial_iteration_"+str(i)+"_structure_"+str(j)+".cif"
-    #     ase.io.write(filename, minima)
+    for j, minima in enumerate(dict_to_atoms(initial_structures_novelty)):
+        filename = "optim_z/initial_iteration_"+str(i)+"_structure_"+str(j)+".cif"
+        ase.io.write(filename, minima)
     # read_structure = ase.io.read("init.cif")
 
     # initial_structures=[atoms_to_dict([read_structure], loss=[None])]
@@ -96,8 +96,8 @@ for i in range(0, max_iterations):
     #---Optimizing a batch of structures with batch basin hopping---
     # alternatively if we dont use ASE, we can optimize in batch, and optimize over multiple objectives as well
     # we do this by first initializing our objective function, which is similar to the loss function class in matdeeplearn
-    # objective_func_energy = Energy(normalize=True, ljr_ratio=1)
-    objective_func_novelty = EmbeddingDistance(embeddings, normalize=True, energy_ratio=2, ljr_ratio=1, ljr_scale=.7, embedding_ratio=.1)
+    objective_func_energy = Energy(normalize=True, ljr_ratio=1)
+    # objective_func_novelty = EmbeddingDistance(embeddings, normalize=True, energy_ratio=2, ljr_ratio=1, ljr_scale=.7, embedding_ratio=.1)
     # objective_func = EnergyAndUncertainty(normalize=True, uncertainty_ratio=.25, ljr_ratio=1, ljr_scale=.7)
     # start_time = time.time()
     # total_list_batch, minima_list_batch, best_hop, energies, accepts, accept_rate, temps, step_sizes = predictor_batch.predict(initial_structures_energy, objective_func_energy, batch_size=8, log_per=0, lr=.05)
@@ -131,7 +131,7 @@ for i in range(0, max_iterations):
     # print('Time taken for energy: {:.2f}'.format(time.time() - start_time))
 
     start_time = time.time()
-    total_list_batch, minima_list_batch, best_hop, energies, accepts, accept_rate, temps, step_sizes = predictor_batch.predict(initial_structures_novelty, objective_func_novelty, batch_size=8, log_per=0, lr=.05)
+    total_list_batch, minima_list_batch, best_hop, energies, accepts, accept_rate, temps, step_sizes = predictor_batch.predict(initial_structures_novelty, objective_func_energy, batch_size=1, log_per=1, lr=.01)
     top_novelty = sorted(minima_list_batch, key=lambda struc: struc['objective_loss'])[:400]
     print('---------TOP 400 NOVELTY STRUCTURES---------')
     print(top_novelty)
@@ -139,10 +139,10 @@ for i in range(0, max_iterations):
     minima_list_batch_ase = dict_to_atoms(minima_list_batch)
     top_novelty_ase = dict_to_atoms(top_novelty)
     for j, minima in enumerate(minima_list_batch_ase):
-        filename = "all_16k_novelty_2/iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
+        filename = "optim_z/iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
         ase.io.write(filename, minima)
     for j, minima in enumerate(top_novelty_ase):
-        filename = "top_400_novelty_2/iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
+        filename = "optim_z/iteration_"+str(i)+"_structure_"+str(j)+"_mdl_batch.cif"
         ase.io.write(filename, minima)
     # f = open('output.txt', 'w')
     # for i in range(len(total_list_batch)):
