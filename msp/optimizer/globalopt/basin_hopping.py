@@ -342,7 +342,7 @@ class BasinHoppingBatch(BasinHoppingBase):
         self.forcefield = forcefield
     
     def predict(self, structures, objective_func, cell_relax=True, topk=1, batch_size=4, log_per=0, lr=.05, density=.2, num_atoms_perturb=1, 
-                num_unique=4, dynamic_temp=False, dynamic_dr=False, optim_z=False):
+                num_unique=4, dynamic_temp=False, dynamic_dr=False, optimize_z=False):
         """
         Optimizes the list of compositions in batches
 
@@ -393,7 +393,7 @@ class BasinHoppingBatch(BasinHoppingBase):
         for i in range(self.hops):
             start_time = time()
             new_atoms, obj_loss, energy_loss, novel_loss, soft_sphere_loss = self.forcefield.optimize(new_atoms, self.steps, objective_func, log_per, lr, 
-                                                                                                      batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer, optim_z=optim_z)
+                                                                                                      batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer, optimize_z=optimize_z)
             if dynamic_dr:
                 self.change_dr(accepts[0], rate=0.1)
             end_time = time()
@@ -444,7 +444,7 @@ class BasinHoppingBatch(BasinHoppingBase):
             print('HOP', i, 'took', end_time - start_time, 'seconds')                
         print('Final optimization')
         best_atoms, obj_loss, energy_loss, novel_loss, soft_sphere_loss = self.forcefield.optimize(best_atoms, 1, objective_func, log_per, lr, 
-                                                                                batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer, optim_z=optim_z)
+                                                                                batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer, optimize_z=optimize_z)
         avg_loss = 0
         for j, hop in enumerate(best_hop):
             if getattr(objective_func, 'normalize', False):
