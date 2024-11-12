@@ -20,6 +20,7 @@ def init_structure(composition, pyxtal=False, density=2):
         composition (list): A list of the atomic numbers
         pyxtal (bool): If True, tries to use pyxtal to generate a random symmetric structure. 
             If False, generates a completely random structure.
+        density (float): The ideal density of the structure.
     
     Returns:
         dict: representing structure

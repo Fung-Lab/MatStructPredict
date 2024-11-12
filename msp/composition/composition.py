@@ -16,7 +16,6 @@ def hash_structure(atomic_numbers):
     """
     counts = Counter(atomic_numbers)
     sorted_counts = sorted(counts.items())
-    # divide the counts by the gcd of the counts
     gcd = sorted_counts[0][1]
     for elem in sorted_counts:
         gcd = math.gcd(gcd, elem[1])

@@ -82,7 +82,6 @@ class MDL_FF(ForceField):
         self.trainer = self.from_config_train(self.train_config, self.dataset, max_epochs, lr, batch_size)
         self.trainer.train()
         
-        #state = {"state_dict": self.model.state_dict()}
         if save_model:
             os.makedirs(save_path, exist_ok=True)
             for i in range(len(self.trainer.model)):
@@ -123,7 +122,6 @@ class MDL_FF(ForceField):
                     test_ratio,
                 )
         self.update_trainer(self.dataset, max_epochs, lr, batch_size)
-        #self.model = self.trainer.model
         self.trainer.train()
 
         if save_model:
@@ -285,7 +283,7 @@ class MDL_FF(ForceField):
         
         return output
     
-    def get_embeddings(self, dataset, batch_size, cluster=False, num_clusters=5000):
+    def get_embeddings(self, dataset, batch_size, cluster=False, num_clusters=5000, cluster_batch_size=2048):
         """
         Get embeddings from the model for the dataset.
         Args:
@@ -293,6 +291,7 @@ class MDL_FF(ForceField):
             batch_size (int): The batch size for the model.
             cluster (bool): Whether to cluster the embeddings. Defaults to False.
             num_clusters (int): The number of clusters to use. Defaults to 5000.
+            cluster_batch_size (int): The batch size for clustering. Defaults to 2048.
         
         Returns:
             torch.tensor: The embeddings from the model.
@@ -323,7 +322,7 @@ class MDL_FF(ForceField):
         if cluster:
             res = []
             for i in range(len(self.trainer.model)):
-                clust = MiniBatchKMeans(init="k-means++", n_clusters=5000, batch_size=2048)
+                clust = MiniBatchKMeans(init="k-means++", n_clusters=num_clusters, batch_size=cluster_batch_size)
                 start_time = time.time()
                 cluster_labels = clust.fit_predict(embeddings[i].cpu().detach().numpy())
                 print('Model', i, 'clustering took', time.time() - start_time)
@@ -380,7 +379,7 @@ class MDL_FF(ForceField):
         calculator = MDLCalculator(config=self.train_config)        
         return calculator
 
-    def optimize(self, atoms, steps, objective_func, log_per, learning_rate, num_structures=-1, batch_size=4, device='cpu', cell_relax=True, optim='Adam'):
+    def optimize(self, atoms, steps, objective_func, log_per, learning_rate, num_structures=-1, batch_size=4, device='cpu', cell_relax=True, optim='Adam', optimize_z=False):
         """
         Optimizes batches of structures using the force field model.
         Args:
@@ -394,6 +393,7 @@ class MDL_FF(ForceField):
             device (str): The device to use for optimization. Defaults to 'cpu'.
             cell_relax (bool): Whether to relax the cell. Defaults to True.
             optim (str): The optimizer to use. Defaults to 'Adam'.
+            optimize_z (bool): Whether to optimize the atomic numbers. Defaults to False.
 
         Returns:
             res_atoms (list): A list of optimized ASE atoms objects.
@@ -424,16 +424,23 @@ class MDL_FF(ForceField):
             batch = next(loader_iter).to(device)
             objective_func.set_norm_offset(batch.z, batch.n_atoms)
             pos, cell = batch.pos, batch.cell
-            gauss_z = batch.gauss_atom_features
-            print(batch.z, "before optimization")
+            gauss_z = None
+            if optimize_z:
+                gauss_z = batch.gauss_atom_features
+            # print(batch.z, "before optimization")
 
-            opt = getattr(torch.optim, optim, torch.optim.Adam)([pos, cell, gauss_z], lr=learning_rate)
+            opt = None
+            if optimize_z:
+                opt = getattr(torch.optim, optim, torch.optim.Adam)([pos, cell, gauss_z], lr=learning_rate)
+            else:
+                opt = getattr(torch.optim, optim, torch.optim.Adam)([pos, cell], lr=learning_rate)
             lr_scheduler = ReduceLROnPlateau(opt, 'min', factor=0.8, patience=10)
 
             pos.requires_grad_(True)
             if cell_relax:
                 cell.requires_grad_(True)
-            gauss_z.requires_grad_(True)
+            if optimize_z:
+                gauss_z.requires_grad_(True)
 
             temp_obj = [0]
             temp_energy = [0]
@@ -456,8 +463,9 @@ class MDL_FF(ForceField):
                         step[0], objective_loss.mean().item(), pos.grad.abs().mean().item(), gauss_z.grad.abs().mean().item(), curr_time))
                 step[0] += 1
                 batch.pos, batch.cell = pos, cell
-                batch.gauss_atom_features = gauss_z
-                batch.z = gauss_z.argmax(dim=-1)
+                if optimize_z:
+                    batch.gauss_atom_features = gauss_z
+                    batch.z = gauss_z.argmax(dim=-1)
                 temp_obj[0] = objective_loss
                 temp_energy[0] = energy_loss
                 temp_novel[0] = novel_loss
@@ -468,14 +476,15 @@ class MDL_FF(ForceField):
                 old_step = step[0]
                 loss = opt.step(lambda: closure(step, temp_obj, temp_energy, temp_novel, temp_soft_sphere, batch))
                 lr_scheduler.step(loss)
-            batch.z = batch.gauss_atom_features.argmax(dim=-1)
+            if optimize_z:
+                batch.z = batch.gauss_atom_features.argmax(dim=-1)
             res_atoms.extend(data_to_atoms(batch))
             obj_loss.extend(temp_obj[0].cpu().detach().numpy())
             energy_loss.extend(temp_energy[0].cpu().detach().numpy())
             novel_loss.extend(temp_novel[0].cpu().detach().numpy())
             soft_sphere_loss.extend(temp_soft_sphere[0].cpu().detach().numpy())
-            print(batch.gauss_atom_features)
-            print(batch.z, "after optimization")
+            # print(batch.gauss_atom_features)
+            # print(batch.z, "after optimization")
         for i in range(len(self.trainer.model)):
             self.trainer.model[i].gradient = True           
 

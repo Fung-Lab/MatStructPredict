@@ -341,7 +341,8 @@ class BasinHoppingBatch(BasinHoppingBase):
         super().__init__("BasinHopping", hops=hops, steps=steps, optimizer=optimizer, dr=dr, max_atom_num=max_atom_num, perturbs=perturbs, elems_to_sample=elems_to_sample, **kwargs)
         self.forcefield = forcefield
     
-    def predict(self, structures, objective_func, cell_relax=True, topk=1, batch_size=4, log_per=0, lr=.05, density=.2, num_atoms_perturb=1, num_unique=4, dynamic_temp=False, dynamic_dr=False):
+    def predict(self, structures, objective_func, cell_relax=True, topk=1, batch_size=4, log_per=0, lr=.05, density=.2, num_atoms_perturb=1, 
+                num_unique=4, dynamic_temp=False, dynamic_dr=False, optim_z=False):
         """
         Optimizes the list of compositions in batches
 
@@ -358,6 +359,7 @@ class BasinHoppingBatch(BasinHoppingBase):
             num_unique (int, optional): number of unique atoms in the structure. Defaults to 4.
             dynamic_temp (bool, optional): Whether to change temperature dynamically. Defaults to False.
             dynamic_dr (bool, optional): Whether to change dr dynamically. Defaults to False.
+            optim_z (bool, optional): Whether to optimize the z values of the atoms. Defaults to False.
 
         Returns:
             res (list): A list of dictionaries containing the optimization results
@@ -390,7 +392,8 @@ class BasinHoppingBatch(BasinHoppingBase):
             res.append([])
         for i in range(self.hops):
             start_time = time()
-            new_atoms, obj_loss, energy_loss, novel_loss, soft_sphere_loss = self.forcefield.optimize(new_atoms, self.steps, objective_func, log_per, lr, batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer)
+            new_atoms, obj_loss, energy_loss, novel_loss, soft_sphere_loss = self.forcefield.optimize(new_atoms, self.steps, objective_func, log_per, lr, 
+                                                                                                      batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer, optim_z=optim_z)
             if dynamic_dr:
                 self.change_dr(accepts[0], rate=0.1)
             end_time = time()
@@ -440,7 +443,8 @@ class BasinHoppingBatch(BasinHoppingBase):
                 self.perturbs[rand_ind](new_atoms[j], num_atoms_perturb=num_atoms_perturb, num_unique=num_unique)
             print('HOP', i, 'took', end_time - start_time, 'seconds')                
         print('Final optimization')
-        best_atoms, obj_loss, energy_loss, novel_loss, soft_sphere_loss = self.forcefield.optimize(best_atoms, 1, objective_func, log_per, lr, batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer)
+        best_atoms, obj_loss, energy_loss, novel_loss, soft_sphere_loss = self.forcefield.optimize(best_atoms, 1, objective_func, log_per, lr, 
+                                                                                batch_size=batch_size, cell_relax=cell_relax, optim=self.optimizer, optim_z=optim_z)
         avg_loss = 0
         for j, hop in enumerate(best_hop):
             if getattr(objective_func, 'normalize', False):

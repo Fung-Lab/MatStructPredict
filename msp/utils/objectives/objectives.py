@@ -8,7 +8,7 @@ from matdeeplearn.preprocessor.helpers import GaussianSmearing2D
         
 class Energy(torch.nn.Module):
 
-    def __init__(self, normalize=True, energy_ratio=1.0, ljr_ratio=1.0, ljr_power=12, ljr_scale = .8, min_ljr_val=1.0):
+    def __init__(self, normalize=True, energy_ratio=1.0, ljr_ratio=1.0, ljr_power=12, ljr_scale = .8, min_ljr_val=1.0, optimize_z=False, gauss_loss_ratio=0.0):
         super().__init__()
         """
         Initialize objective function using only energy and no novel loss
@@ -18,6 +18,9 @@ class Energy(torch.nn.Module):
             ljr_ratio (float): Weight of the Lennard-Jones repulsion in the loss
             ljr_power (int): Power for the Lennard-Jones repulsion calculation
             ljr_scale (float): Scaling factor for the Lennard-Jones repulsion
+            min_ljr_val (float): Minimum value for the Lennard-Jones repulsion
+            optimize_z (bool): Whether to optimize the atomic numbers
+            gauss_loss_ratio (float): Weight of the Gaussian loss in the loss
         """
         self.normalize = normalize
         self.ljr_power = ljr_power
@@ -25,6 +28,8 @@ class Energy(torch.nn.Module):
         self.lj_rmins[self.lj_rmins < 1.0] = 1.0
         self.ljr_ratio = ljr_ratio
         self.energy_ratio = energy_ratio
+        self.optimize_z = optimize_z
+        self.gauss_loss_ratio = gauss_loss_ratio
         self.element_energy = [-10000, -3.392726045, -0.00905951, -1.9089228666666667, -3.739412865, -6.679391770833334,
                                 -9.2286654925, -8.336494925, -4.947961005, -1.9114789675, -0.02593678, -1.3225252934482759, 
                                 -1.60028005, -3.74557583, -5.42531803, -5.413302506666667, -4.136449866875, -1.84853666, 
@@ -92,7 +97,7 @@ class Energy(torch.nn.Module):
     
     def gaussian_loss(self, batch):
         """
-        Calculate the Gaussian loss
+        Calculate the Gaussian loss (distance between atomic features and ideal Gaussian features + sum of negative atomic features)
         Args:
             batch (torch_geometric.data.Batch): Batch of data
         Returns:
@@ -122,11 +127,13 @@ class Energy(torch.nn.Module):
             # for i in range(len(batch.n_atoms)):
             #     model_output['potential_energy'][i] = (model_output['potential_energy'][i] + self.offset[i]) / batch.n_atoms[i]
         ljr = self.lj_repulsion(batch, power=self.ljr_power)
-        gauss_loss = self.gaussian_loss(batch)
+        gauss_loss = 0
+        if self.optimize_z:
+            gauss_loss = self.gauss_loss_ratio * self.gaussian_loss(batch)
         return self.energy_ratio * model_output["potential_energy"] + self.ljr_ratio * ljr + gauss_loss, model_output["potential_energy"], torch.zeros(len(model_output['potential_energy']), 1).to(ljr.device), ljr
 
 class EnergyAndUncertainty(Energy):
-    def __init__(self, normalize=True, energy_ratio=1.0, ljr_ratio=1, ljr_power=12, ljr_scale=.8, uncertainty_ratio=.25, min_ljr_val=1.0):
+    def __init__(self, normalize=True, energy_ratio=1.0, ljr_ratio=1, ljr_power=12, ljr_scale=.8, uncertainty_ratio=.25, min_ljr_val=1.0, optimize_z=False, gauss_loss_ratio=0.0):
         """
         Initialize objective function using energy and uncertainty as novel loss
         Args:
@@ -136,8 +143,9 @@ class EnergyAndUncertainty(Energy):
             ljr_power (int): Power for the Lennard-Jones repulsion calculation
             ljr_scale (float): Scaling factor for the Lennard-Jones repulsion
             uncertainty_ratio (float): Weight of the uncertainty in the loss
+            optimize_z (bool): Whether to optimize the atomic numbers
         """
-        super().__init__(normalize, energy_ratio, ljr_ratio, ljr_power, ljr_scale, min_ljr_val)
+        super().__init__(normalize, energy_ratio, ljr_ratio, ljr_power, ljr_scale, min_ljr_val, optimize_z, gauss_loss_ratio)
         self.uncertainty_ratio = uncertainty_ratio
     
     def forward(self, model_output, batch):
@@ -157,13 +165,16 @@ class EnergyAndUncertainty(Energy):
             # for i in range(len(batch.n_atoms)):
             #     model_output['potential_energy'][i] = (model_output['potential_energy'][i] + self.offset[i]) / batch.n_atoms[i]
         ljr = self.lj_repulsion(batch, power=self.ljr_power)
-        return self.energy_ratio * model_output["potential_energy"] - self.uncertainty_ratio * model_output["potential_energy_uncertainty"] + self.ljr_ratio * ljr, model_output["potential_energy"], -model_output["potential_energy_uncertainty"], ljr
+        gauss_loss = 0
+        if self.optimize_z:
+            gauss_loss = self.gauss_loss_ratio * self.gaussian_loss(batch)
+        return self.energy_ratio * model_output["potential_energy"] - self.uncertainty_ratio * model_output["potential_energy_uncertainty"] + self.ljr_ratio * ljr + gauss_loss, model_output["potential_energy"], -model_output["potential_energy_uncertainty"], ljr
 
 
 
 
 class EmbeddingDistance(Energy):
-    def __init__(self, embeddings, normalize=True, energy_ratio=1.0, ljr_ratio=1, ljr_power=12, ljr_scale=.8, min_ljr_val=1.0, embedding_ratio=.1, mode="min"):
+    def __init__(self, embeddings, normalize=True, energy_ratio=1.0, ljr_ratio=1, ljr_power=12, ljr_scale=.8, min_ljr_val=1.0, embedding_ratio=.1, mode="min", optimize_z=False, gauss_loss_ratio=0.0):
         """
         Initialize objective function using only energy and embedding distance as novel loss
             embedding distance is aggregated euclidean distance between structure embedding and database embeddings
@@ -176,8 +187,10 @@ class EmbeddingDistance(Energy):
             ljr_scale (float): Scaling factor for the Lennard-Jones repulsion
             embedding_ratio (float): Weight of the embedding distance in the loss
             mode (str): Aggregation mode for the embedding distance, either "min" or "mean"
+            optimize_z (bool): Whether to optimize the atomic
+            gauss_loss_ratio (float): Weight of the Gaussian loss in the loss
         """
-        super().__init__(normalize, energy_ratio, ljr_ratio, ljr_power, ljr_scale, min_ljr_val)
+        super().__init__(normalize, energy_ratio, ljr_ratio, ljr_power, ljr_scale, min_ljr_val, optimize_z, gauss_loss_ratio)
         self.embedding_ratio = embedding_ratio
         self.embeddings = embeddings
         self.mode = mode
@@ -223,4 +236,7 @@ class EmbeddingDistance(Energy):
         else:
             embedding_loss = torch.mean(embedding_loss, dim=0)
             embedding_loss = torch.mean(embedding_loss, dim=-1, keepdim=True)
-        return self.energy_ratio * model_output["potential_energy"] - self.embedding_ratio * embedding_loss + self.ljr_ratio * ljr, model_output["potential_energy"], -embedding_loss, ljr
+        gauss_loss = 0
+        if self.optimize_z:
+            gauss_loss = self.gauss_loss_ratio * self.gaussian_loss(batch)
+        return self.energy_ratio * model_output["potential_energy"] - self.embedding_ratio * embedding_loss + self.ljr_ratio * ljr + gauss_loss, model_output["potential_energy"], -embedding_loss, ljr
