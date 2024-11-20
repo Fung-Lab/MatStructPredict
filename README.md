@@ -7,9 +7,9 @@ MatStructPredict is a machine learning library that offers simple, flexible pipe
     - [Table of Contents](#table-of-contents)
     - [Motivation](#motivation)
     - [Features](#features)
-    - [Installation](#installation-todo)
+    - [Installation](#installation)
     - [Quick Start: Structure Prediction](#quick-start-structure-prediction)
-    - [Contributing](#contributing-todo)
+    - [Contributing](#contributing)
     - [License](#license-todo)
     - [Citation](#citation-todo)
 
