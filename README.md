@@ -7,11 +7,11 @@ MatStructPredict is a machine learning library that offers simple, flexible pipe
     - [Table of Contents](#table-of-contents)
     - [Motivation](#motivation)
     - [Features](#features)
-    - [Installation](#installation-todo)
+    - [Installation](#installation)
     - [Quick Start: Structure Prediction](#quick-start-structure-prediction)
     - [Contributing](#contributing)
-    - [License](#license-todo)
-    - [Citation](#citation-todo)
+    - [License](#license)
+    - [Citation](#citation)
 
 
 ## Motivation
@@ -68,8 +68,8 @@ By simplifying the process of predicting structures, MatStructPredict gives rese
   - Saving structures
   - Finetuning model on new structures
 
-## Installation - TODO
-
+## Installation
+TODO
 ```bash
 pip install matstructpredict
 ```
@@ -80,12 +80,12 @@ Use example.py and mdl_config.yml for a quick structure prediction run using a M
 
 Example.ipynb provides a Jupyter Notebook that takes users through each step of the Structure Prediction process.
 
-## Contributing - TODO
- 
-## License - TODO
-
-## Citation - TODO
-
+## Contributing
+ TODO
+## License
+TODO
+## Citation
+YODO
 If you use MatStructPredict in your research, please cite:
 
 TODO
