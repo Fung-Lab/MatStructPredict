@@ -85,7 +85,7 @@ Example.ipynb provides a Jupyter Notebook that takes users through each step of 
 ## License
 TODO
 ## Citation
-YODO
+TODO
 If you use MatStructPredict in your research, please cite:
 
 TODO
