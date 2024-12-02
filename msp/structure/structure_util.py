@@ -2,38 +2,45 @@ import numpy as np
 from ase import Atoms
 import torch
 from torch_geometric.data import Data
-from ase.data import chemical_symbols
+import random
+from ase.data import chemical_symbols, atomic_masses
 import smact
 from smact.screening import pauling_test
 import itertools
+from matdeeplearn.preprocessor.helpers import GaussianSmearing2D
 
 
 
-def init_structure(composition, pyxtal=False, density=.2):
+
+def init_structure(composition, pyxtal=False, density=2):
     """
     Creates a dictionary representing a structure from a composition
     
     Args:
         composition (list): A list of the atomic numbers
+        pyxtal (bool): If True, tries to use pyxtal to generate a random symmetric structure. 
+            If False, generates a completely random structure.
+        density (float): The ideal density of the structure.
     
     Returns:
         dict: representing structure
     """
     atoms = None
+    mass = sum([atomic_masses[num] for num in composition])
     if not pyxtal:
-        beta = np.random.uniform(0, 180)
-        gamma = np.random.uniform(0, 180)
+        beta = np.random.uniform(10, 169)
+        gamma = np.random.uniform(10, 169)
         minCosA = - np.sin(gamma * np.pi/180) * np.sqrt(1 - np.cos(beta* np.pi/180) ** 2) + np.cos(beta * np.pi/180) * np.cos(gamma * np.pi/180)
         maxCosA = np.sin(gamma * np.pi/180) * np.sqrt(1 - np.cos(beta* np.pi/180) ** 2) + np.cos(beta * np.pi/180) * np.cos(gamma * np.pi/180)
         alpha = np.random.uniform(minCosA, maxCosA)
         alpha = np.arccos(alpha) * 180 / np.pi
-        a = np.random.rand() + .000001
-        b = np.random.rand() + .000001
-        c = np.random.rand() + .000001
+        a = np.random.uniform(0.2, 1)
+        b = np.random.uniform(0.2, 1)
+        c = np.random.uniform(0.2, 1)
         cell=[a, b, c, alpha, beta, gamma]
         atoms = Atoms(composition, cell=cell, pbc=(True, True, True))
-        vol = atoms.get_cell().volume
-        ideal_vol = len(composition) / density
+        vol = atoms.get_cell().volume   
+        ideal_vol = mass / density
         scale = (ideal_vol / vol) ** (1/3)
         cell = [scale * a, scale * b, scale * c, alpha, beta, gamma]
         atoms.set_cell(cell)
@@ -46,30 +53,33 @@ def init_structure(composition, pyxtal=False, density=.2):
         counts = [composition.count(num) for num in unique_nums]
         symbols = [chemical_symbols[num] for num in unique_nums]
         struct_num = 0
-        use_random = False
-        for i in range(1, 231):
+        space_group  = list(range(2, 231))
+        random.shuffle(space_group)
+        use_random = True
+        for i in space_group:
             try:
-                use_random = True
                 struct_num = i
-                struc.from_random(3, i, symbols, counts)
+                struc.from_random(3, i, symbols, counts, factor=1.4, max_count=20)
+                use_random = False
                 break
-            except:
-                continue
+            except Exception as e:
+                pass
         if use_random:
             print('Composition ', composition, 'not compatible with pyxtal. Using random structure')
-            beta = np.random.uniform(0, 180)
-            gamma = np.random.uniform(0, 180)
+            beta = np.random.uniform(10, 169)
+            gamma = np.random.uniform(10, 169)
             minCosA = - np.sin(gamma * np.pi/180) * np.sqrt(1 - np.cos(beta* np.pi/180) ** 2) + np.cos(beta * np.pi/180) * np.cos(gamma * np.pi/180)
             maxCosA = np.sin(gamma * np.pi/180) * np.sqrt(1 - np.cos(beta* np.pi/180) ** 2) + np.cos(beta * np.pi/180) * np.cos(gamma * np.pi/180)
             alpha = np.random.uniform(minCosA, maxCosA)
             alpha = np.arccos(alpha) * 180 / np.pi
-            a = np.random.rand() + .000001
-            b = np.random.rand() + .000001
-            c = np.random.rand() + .000001
+            a = np.random.uniform(0.2, 1)
+            b = np.random.uniform(0.2, 1)
+            c = np.random.uniform(0.2, 1)
             cell=[a, b, c, alpha, beta, gamma]
             atoms = Atoms(composition, cell=cell, pbc=(True, True, True))
             vol = atoms.get_cell().volume
-            ideal_vol = len(composition) / density
+            # ideal_vol = len(composition) / density 
+            ideal_vol = mass / density
             scale = (ideal_vol / vol) ** (1/3)
             cell = [scale * a, scale * b, scale * c, alpha, beta, gamma]
             atoms.set_cell(cell)
@@ -81,13 +91,13 @@ def init_structure(composition, pyxtal=False, density=.2):
     
     return atoms_to_dict([atoms], [None])[0]
 
-def atoms_to_dict(atoms, loss=None):
+def atoms_to_dict(atoms, objective_loss=None, raw_energy=None, forces=None, stress=None):
     """
     Creates a list of dict from a list of ASE atoms objects
     
     Args:
         atoms (list): A list of ASE atoms objects
-        energy (list): A list of predicted energies for each ASE atoms object.
+        loss (list): A list of predicted losses for each ASE atoms object.
     
     Returns:
         list: Contains atoms represented as dicts
@@ -95,14 +105,24 @@ def atoms_to_dict(atoms, loss=None):
     res = [{} for _ in atoms]
     for i, d in enumerate(res):
         d['n_atoms'] = len(atoms[i].get_atomic_numbers())
-        d['pos'] = atoms[i].get_positions()
-        d['cell'] = atoms[i].get_cell()
+        d['positions'] = atoms[i].get_positions()
+        d['cell'] = atoms[i].get_cell().array.tolist()
         d['z'] = atoms[i].get_atomic_numbers()
         d['atomic_numbers'] = atoms[i].get_atomic_numbers()
-        if loss is None:
-            d['loss'] = None
+        if raw_energy is not None:
+            d['y'] = raw_energy[i]
         else:
-            d['loss'] = loss[i]
+            d['y'] = None
+        if objective_loss is not None:
+            d['objective_loss'] = objective_loss[i]
+        else:
+            d['objective_loss'] = None
+        if forces is not None:
+            d['forces'] = forces[i] 
+            d['stress'] = stress[i].reshape(1, 3, 3)
+        else:
+            d['forces'] = None
+            d['stress'] = None
     return res
 
 def dict_to_atoms(dictionaries):
@@ -117,7 +137,7 @@ def dict_to_atoms(dictionaries):
     """
     res = []
     for d in dictionaries:
-        res.append(Atoms(d['z'], cell=d['cell'], positions=d['pos']))
+        res.append(Atoms(d['z'], cell=d['cell'], positions=d['positions']))
     return res
 
 def atoms_to_data(atoms):
@@ -131,6 +151,7 @@ def atoms_to_data(atoms):
     """
     n_structures = len(atoms)
     data_list = [Data() for _ in range(n_structures)]
+    gauss = GaussianSmearing2D(.35, .5, 100)
 
     for i, s in enumerate(atoms):
         data = s
@@ -146,6 +167,7 @@ def atoms_to_data(atoms):
         data_list[i].structure_id = [structure_id]  
         data_list[i].z = atomic_numbers
         data_list[i].u = torch.Tensor(np.zeros((3))[np.newaxis, ...])
+        data_list[i].gauss_atom_features = gauss(data_list[i].z)
 
     return data_list
 
@@ -168,6 +190,16 @@ def data_to_atoms(batch):
 def smact_validity(comp, count,
                    use_pauling_test=True,
                    include_alloys=True):
+    """
+    Check if a composition is valid according to the SMACt screening rules.
+    Args:
+        comp (list): List of atomic numbers
+        count (list): List of counts for each atomic number
+        use_pauling_test (bool): If True, uses the Pauling test to check if the electronegativity is valid.
+        include_alloys (bool): If True, allows for the composition to be an alloy.
+    Returns:
+        bool: True if the composition is valid, False otherwise.
+    """
     elem_symbols = tuple([chemical_symbols[elem] for elem in comp])
     space = smact.element_dictionary(elem_symbols)
     smact_elems = [e[1] for e in space.items()]
